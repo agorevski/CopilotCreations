@@ -5,6 +5,7 @@ Create project command for the Discord Copilot Bot.
 import asyncio
 import io
 import re
+import shutil
 import traceback
 import uuid
 from datetime import datetime
@@ -26,6 +27,7 @@ from ..config import (
     UNIQUE_ID_LENGTH,
     PROGRESS_LOG_INTERVAL_SECONDS,
     GITHUB_ENABLED,
+    CLEANUP_AFTER_PUSH,
     MAX_PROMPT_LENGTH,
     MODEL_NAME_PATTERN,
     get_prompt_template
@@ -345,7 +347,32 @@ async def _handle_github_integration(
     elif not GITHUB_ENABLED:
         logger.debug("GitHub integration is disabled")
     
-    return github_status
+    return github_status, github_url is not None
+
+
+def _cleanup_project_directory(
+    project_path: Path,
+    session_log: SessionLogCollector
+) -> bool:
+    """Delete the local project directory after successful GitHub push.
+    
+    Args:
+        project_path: Path to the project directory to delete.
+        session_log: Session log collector.
+    
+    Returns:
+        True if cleanup was successful, False otherwise.
+    """
+    try:
+        if project_path.exists():
+            shutil.rmtree(project_path)
+            session_log.info(f"Cleaned up local project directory: {project_path}")
+            logger.info(f"Cleaned up local project directory: {project_path}")
+            return True
+    except Exception as e:
+        session_log.warning(f"Failed to cleanup project directory: {e}")
+        logger.warning(f"Failed to cleanup project directory {project_path}: {e}")
+    return False
 
 
 async def _send_summary(
@@ -536,7 +563,7 @@ def setup_createproject_command(bot) -> Callable:
         file_count, dir_count = count_files_excluding_ignored(project_path)
         
         # Handle GitHub integration
-        github_status = await _handle_github_integration(
+        github_status, github_success = await _handle_github_integration(
             project_path, folder_name, prompt, timed_out, error_occurred, process, session_log
         )
         
@@ -546,5 +573,9 @@ def setup_createproject_command(bot) -> Callable:
             timed_out, error_occurred, error_message, process,
             file_count, dir_count, github_status
         )
+        
+        # Cleanup local project directory after successful GitHub push
+        if CLEANUP_AFTER_PUSH and github_success:
+            _cleanup_project_directory(project_path, session_log)
     
     return createproject

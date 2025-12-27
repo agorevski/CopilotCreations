@@ -22,6 +22,9 @@ GITHUB_ENABLED = os.getenv("GITHUB_ENABLED", "false").lower() == "true"
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_USERNAME = os.getenv("GITHUB_USERNAME")
 
+# Cleanup Configuration - delete local project folder after successful GitHub push
+CLEANUP_AFTER_PUSH = os.getenv("CLEANUP_AFTER_PUSH", "true").lower() == "true"
+
 # Project Paths
 BASE_DIR = Path(__file__).parent.parent
 PROJECTS_DIR = BASE_DIR / "projects"
@@ -84,7 +87,8 @@ MAX_MESSAGE_LENGTH = 4000  # Discord max is 4000 for bot messages
 COPILOT_DEFAULT_FLAGS = [
     "--allow-all-paths",
     "--allow-all-tools",
-    "--allow-all-urls"
+    "--allow-all-urls",
+    "--log-level", "debug"
 ]
 
 # Prompt truncation lengths for display
