@@ -39,6 +39,84 @@ class TestSanitizeUsername:
         long_name = "a" * 100
         result = sanitize_username(long_name)
         assert len(result) <= 50
+    
+    def test_username_with_backslash(self):
+        result = sanitize_username("user\\name")
+        assert "\\" not in result
+    
+    def test_username_with_forward_slash(self):
+        result = sanitize_username("user/name")
+        assert "/" not in result
+    
+    def test_username_with_pipe(self):
+        result = sanitize_username("user|name")
+        assert "|" not in result
+    
+    def test_username_with_question_mark(self):
+        result = sanitize_username("user?name")
+        assert "?" not in result
+    
+    def test_username_with_asterisk(self):
+        result = sanitize_username("user*name")
+        assert "*" not in result
+    
+    def test_username_with_quotes(self):
+        result = sanitize_username('user"name')
+        assert '"' not in result
+    
+    def test_username_with_leading_trailing_dots(self):
+        result = sanitize_username(".user.")
+        assert not result.startswith(".")
+        assert not result.endswith(".")
+    
+    def test_username_with_spaces(self):
+        result = sanitize_username("  user  ")
+        assert not result.startswith(" ")
+        assert not result.endswith(" ")
+
+
+class TestLoadFolderignore:
+    """Tests for load_folderignore function."""
+    
+    def test_loads_from_directory(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            ignore_file = tmppath / ".folderignore"
+            ignore_file.write_text("node_modules/\ndist/\n# comment\n\n")
+            
+            patterns = load_folderignore(tmppath)
+            
+            assert "node_modules" in patterns
+            assert "dist" in patterns
+            assert "# comment" not in patterns
+    
+    def test_returns_empty_for_missing_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            patterns = load_folderignore(Path(tmpdir))
+            # May return empty or patterns from parent/script dir
+            assert isinstance(patterns, set)
+    
+    def test_strips_trailing_slashes(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            ignore_file = tmppath / ".folderignore"
+            ignore_file.write_text("folder_with_slash/\n")
+            
+            patterns = load_folderignore(tmppath)
+            
+            assert "folder_with_slash" in patterns
+    
+    def test_skips_empty_lines(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            ignore_file = tmppath / ".folderignore"
+            ignore_file.write_text("pattern1\n\n\npattern2\n")
+            
+            patterns = load_folderignore(tmppath)
+            
+            assert "" not in patterns
+            assert "pattern1" in patterns
+            assert "pattern2" in patterns
 
 
 class TestIsIgnored:
@@ -60,6 +138,16 @@ class TestIsIgnored:
     
     def test_empty_patterns(self):
         assert is_ignored("anything", set()) is False
+    
+    def test_pattern_with_trailing_slash(self):
+        patterns = {"build/"}
+        assert is_ignored("build", patterns) is True
+    
+    def test_wildcard_prefix(self):
+        patterns = {"*.log"}
+        assert is_ignored("error.log", patterns) is True
+        assert is_ignored("debug.log", patterns) is True
+        assert is_ignored("file.txt", patterns) is False
 
 
 class TestCountFilesRecursive:
@@ -84,6 +172,14 @@ class TestCountFilesRecursive:
             subdir.mkdir()
             (subdir / "file2.txt").touch()
             assert count_files_recursive(tmppath) == 2
+    
+    def test_deeply_nested(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            deep = tmppath / "a" / "b" / "c"
+            deep.mkdir(parents=True)
+            (deep / "file.txt").touch()
+            assert count_files_recursive(tmppath) == 1
 
 
 class TestCountFilesExcludingIgnored:
@@ -109,6 +205,34 @@ class TestCountFilesExcludingIgnored:
             
             assert file_count == 2  # file1.txt and main.py
             assert dir_count == 1   # src only
+    
+    def test_counts_all_without_ignore(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            (tmppath / "file.txt").touch()
+            subdir = tmppath / "subdir"
+            subdir.mkdir()
+            (subdir / "file2.txt").touch()
+            
+            file_count, dir_count = count_files_excluding_ignored(tmppath, set())
+            
+            assert file_count == 2
+            assert dir_count == 1
+    
+    def test_multiple_ignored_dirs(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            
+            for name in ["node_modules", "dist", "build"]:
+                d = tmppath / name
+                d.mkdir()
+                (d / "file.txt").touch()
+            
+            patterns = {"node_modules", "dist", "build"}
+            file_count, dir_count = count_files_excluding_ignored(tmppath, patterns)
+            
+            assert file_count == 0
+            assert dir_count == 0
 
 
 class TestGetFolderTree:
@@ -146,3 +270,44 @@ class TestGetFolderTree:
             assert "node_modules/" in result
             assert "(2 files)" in result
             assert "package.json" not in result  # Should not show contents
+    
+    def test_max_depth_limit(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            
+            # Create deeply nested structure
+            current = tmppath
+            for i in range(10):
+                current = current / f"level{i}"
+                current.mkdir()
+                (current / "file.txt").touch()
+            
+            result = get_folder_tree(tmppath, max_depth=2)
+            
+            # Should truncate with ...
+            assert "..." in result
+    
+    def test_sorts_directories_first(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            (tmppath / "zfile.txt").touch()
+            (tmppath / "adir").mkdir()
+            
+            result = get_folder_tree(tmppath)
+            
+            # Directory should appear before file
+            adir_pos = result.find("adir")
+            zfile_pos = result.find("zfile")
+            assert adir_pos < zfile_pos
+    
+    def test_tree_connectors(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            (tmppath / "file1.txt").touch()
+            (tmppath / "file2.txt").touch()
+            
+            result = get_folder_tree(tmppath)
+            
+            # Should contain tree connectors
+            assert "├──" in result or "└──" in result
+

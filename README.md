@@ -11,6 +11,33 @@ A Discord bot that executes `copilot-cli` to create projects based on user promp
 - Concurrent user support
 - Full error handling with stack traces
 
+## Architecture
+
+```
+CopilotCreations/
+├── run.py                  # Application entry point
+├── src/
+│   ├── bot.py              # Discord bot client with app commands support
+│   ├── config.py           # Configuration settings (env vars, paths, timeouts)
+│   ├── commands/
+│   │   └── createproject.py  # /createproject slash command implementation
+│   └── utils/
+│       ├── folder_utils.py   # File tree generation and directory utilities
+│       ├── logging.py        # Logging configuration
+│       └── text_utils.py     # Text formatting utilities
+├── tests/                  # Unit tests for all modules
+├── projects/               # Output directory for generated projects
+└── docs/                   # Documentation
+```
+
+### Key Components
+
+- **`run.py`**: Entry point that initializes the bot and registers commands
+- **`src/bot.py`**: Discord client using `discord.py` with application commands
+- **`src/config.py`**: Centralized configuration loaded from environment variables
+- **`src/commands/createproject.py`**: Handles the `/createproject` command, spawns `copilot-cli`, and manages real-time Discord message updates
+- **`src/utils/`**: Shared utilities for logging, file operations, and text processing
+
 ## Setup
 
 1. **Install dependencies:**
@@ -36,6 +63,13 @@ A Discord bot that executes `copilot-cli` to create projects based on user promp
      - Select scopes: `bot`, `applications.commands`
      - Select permissions: `Send Messages`, `Embed Links`, `Read Message History`
    - Use the generated URL to invite the bot to your server
+   - Optionally, if you run the bot for the first time after you have the token, the output will show something like this in the console and you can navigate to that Invite URL to attach the Bot to your server.
+   ```text
+   2025-12-27 14:19:15 | INFO     | Bot is ready! Logged in as CopilotCreations#8330
+   2025-12-27 14:19:15 | INFO     | Projects will be saved to: C:\GIT\agorevski\CopilotCreations\projects
+   2025-12-27 14:19:15 | INFO     | Invite URL: https://discord.com/api/oauth2/authorize?client_id=xxxxxxxxxxxx&permissions=274877975552&scope=bot%20applications.commands
+   ```
+
 
 4. **Ensure Copilot CLI is available:**
    - The `copilot` command must be accessible in your PATH
@@ -77,3 +111,39 @@ After completion, a summary message is sent with:
 - Project path
 - File/directory counts
 - User who initiated the command
+
+## Testing
+
+### Run Tests
+
+```bash
+python -m pytest
+```
+
+### Run Tests with Code Coverage
+
+```bash
+python -m pytest --cov=src --cov-report=term-missing
+```
+
+This displays a coverage summary with line numbers for uncovered code.
+
+### Generate HTML Coverage Report
+
+```bash
+python -m pytest --cov=src --cov-report=html
+```
+
+The HTML report is saved to `htmlcov/index.html`.
+
+### Additional Coverage Options
+
+```bash
+# Fail if coverage drops below threshold (e.g., 80%)
+python -m pytest --cov=src --cov-fail-under=80
+
+# Generate multiple report formats
+python -m pytest --cov=src --cov-report=term-missing --cov-report=html --cov-report=xml
+```
+
+

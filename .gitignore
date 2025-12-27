@@ -35,5 +35,12 @@ env/
 *.swp
 *.swo
 
+# Test coverage
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
+
 # Projects created by the bot
 projects/

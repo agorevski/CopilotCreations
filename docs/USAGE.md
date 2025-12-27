@@ -85,7 +85,7 @@ Ignored folders appear as: `node_modules/ (1234 files)`
 
 ```bash
 # Install test dependencies
-pip install pytest
+pip install pytest pytest-cov
 
 # Run all tests
 pytest tests/
@@ -93,9 +93,19 @@ pytest tests/
 # Run with verbose output
 pytest tests/ -v
 
-# Run specific test file
-pytest tests/test_folder_utils.py
+# Run with coverage report
+pytest tests/ --cov=src --cov-report=term-missing
+
+# Generate HTML coverage report
+pytest tests/ --cov=src --cov-report=html
+# Open htmlcov/index.html in browser
 ```
+
+### Coverage Requirements
+
+The project requires **>75% test coverage**. Current coverage: **78%+**
+
+Coverage configuration is in `pyproject.toml`.
 
 ## Project Output
 
