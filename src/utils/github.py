@@ -76,7 +76,7 @@ class GitHubManager:
         self,
         repo_name: str,
         description: str = "",
-        private: bool = True
+        private: bool = False
     ) -> Tuple[bool, str, Optional[str]]:
         """
         Create a new GitHub repository.
@@ -187,7 +187,7 @@ class GitHubManager:
         project_path: Path,
         repo_name: str,
         description: str = "",
-        private: bool = True
+        private: bool = False
     ) -> Tuple[bool, str, Optional[str]]:
         """
         Complete workflow: copy .gitignore, create repo, init git, and push.
