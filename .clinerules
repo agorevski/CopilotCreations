@@ -1,0 +1,61 @@
+# Discord Copilot Bot - Project Rules
+
+## Project Overview
+This is a Discord bot written in Python that executes the `copilot` CLI to create projects based on user prompts. The bot provides real-time feedback through Discord messages showing file tree updates and command output.
+
+## Tech Stack
+- Python 3.10+
+- discord.py (official Discord library)
+- python-dotenv for environment configuration
+- asyncio for concurrent subprocess handling
+
+## Project Structure
+```
+discord-copilot-bot/
+├── .env.example    # Template for environment variables
+├── .env            # Actual environment variables (not in git)
+├── .gitignore      # Git ignore rules
+├── README.md       # Documentation
+├── requirements.txt # Python dependencies
+├── run.py          # Main bot entry point
+└── projects/       # Generated projects directory (not in git)
+```
+
+## Key Patterns
+
+### Discord Bot
+- Uses `discord.py` with `app_commands` for slash commands
+- Single-file architecture in `run.py`
+- Async/await patterns throughout
+
+### Subprocess Management
+- Uses `asyncio.create_subprocess_exec` for spawning copilot
+- 30-minute timeout on all subprocesses
+- Concurrent user support (each command spawns separate process)
+
+### Message Updates
+- File tree message updates every 5 seconds
+- Output window updates every 3 seconds (rolling 2000 char limit)
+- Final summary message on completion
+
+## Environment Variables
+- `DISCORD_BOT_TOKEN` - Required Discord bot token
+
+## Commands
+- `/createproject prompt:<text> [model:<model>]` - Main command
+
+## Code Style
+- Use type hints for function parameters
+- Use async/await for all I/O operations
+- Handle exceptions with full stack traces for debugging
+- Sanitize user input for filesystem operations
+
+## Testing
+- Test with Discord bot in a private server first
+- Verify concurrent command handling
+- Test timeout behavior with long-running prompts
+
+## Future Considerations
+- Docker integration planned for later
+- May add more commands for project management
+- Consider adding queue system for high-load scenarios

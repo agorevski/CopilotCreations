@@ -1,0 +1,47 @@
+# Folders to collapse in chat view (shows folder name + file count instead of contents)
+# Uses .gitignore-style patterns
+
+# Dependencies
+node_modules/
+bower_components/
+vendor/
+packages/
+
+# Python
+__pycache__/
+.eggs/
+*.egg-info/
+venv/
+.venv/
+env/
+ENV/
+
+# Build outputs
+dist/
+build/
+out/
+target/
+bin/
+obj/
+
+# IDE/Editor
+.vscode/
+.idea/
+.vs/
+
+# Version control
+.git/
+
+# Package manager caches
+.npm/
+.yarn/
+.pnpm-store/
+.cache/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Logs
+logs/
+*.log
