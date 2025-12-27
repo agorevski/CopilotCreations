@@ -30,3 +30,13 @@ COPILOT_DEFAULT_FLAGS = [
     "--allow-all-tools",
     "--allow-all-urls"
 ]
+
+# Prompt truncation lengths for display
+PROMPT_LOG_TRUNCATE_LENGTH = 100
+PROMPT_SUMMARY_TRUNCATE_LENGTH = 200
+
+# Unique ID generation
+UNIQUE_ID_LENGTH = 8
+
+# Progress logging interval in seconds
+PROGRESS_LOG_INTERVAL_SECONDS = 30

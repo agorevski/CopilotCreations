@@ -67,6 +67,9 @@ Centralized configuration including:
 - Timeout settings
 - Message length limits
 - Copilot CLI default flags
+- Prompt truncation lengths (`PROMPT_LOG_TRUNCATE_LENGTH`, `PROMPT_SUMMARY_TRUNCATE_LENGTH`)
+- Unique ID generation settings (`UNIQUE_ID_LENGTH`)
+- Progress logging interval (`PROGRESS_LOG_INTERVAL_SECONDS`)
 
 ### Commands (`src/commands/`)
 
@@ -156,3 +159,4 @@ User sends /createproject command
 - Graceful handling of timeouts (30 minute limit)
 - Error messages displayed in Discord
 - Fallback mechanisms for failed operations
+- **All exceptions are logged** - no silent exception swallowing; errors are logged at appropriate levels (debug for HTTP errors, warning for unexpected errors)

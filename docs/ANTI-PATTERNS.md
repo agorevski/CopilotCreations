@@ -4,41 +4,7 @@ This document lists developer anti-patterns found in the codebase along with sug
 
 ---
 
-## 1. Silent Exception Swallowing
-
-**Location:** `src/commands/createproject.py` (lines 51-54, 81-83, 260-261)
-
-**Problem:**
-Exceptions are caught and silently ignored with empty `except` blocks, making debugging difficult.
-
-```python
-except discord.errors.HTTPException:
-    pass
-except Exception:
-    pass
-```
-
-**Why it's bad:**
-- Hides errors that may indicate real problems
-- Makes debugging extremely difficult
-- Violates the principle of fail-fast
-
-**Fix:**
-Add logging to exception handlers to track issues while still handling them gracefully:
-
-```python
-except discord.errors.HTTPException as e:
-    logger.debug(f"HTTP error updating message: {e}")
-except Exception as e:
-    logger.warning(f"Unexpected error updating message: {e}")
-```
-
-**Files to modify:**
-- `src/commands/createproject.py`
-
----
-
-## 2. Global Mutable State (Singleton Bot Instance)
+## 1. Global Mutable State (Singleton Bot Instance)
 
 **Location:** `src/bot.py` (line 26)
 
@@ -81,47 +47,7 @@ def create_bot() -> CopilotBot:
 
 ---
 
-## 3. Hardcoded Magic Numbers and Strings
-
-**Location:** `src/commands/createproject.py` (lines 115-117, 207, 265, 303)
-
-**Problem:**
-Magic numbers and strings are scattered throughout the code:
-
-```python
-unique_id = str(uuid.uuid4())[:8]  # Why 8?
-prompt[:100]  # Why 100?
-await asyncio.sleep(30)  # Why 30?
-prompt[:200]  # Why 200?
-```
-
-**Why it's bad:**
-- Hard to understand the intent
-- Inconsistent (100 in one place, 200 in another)
-- Difficult to maintain and change
-
-**Fix:**
-Add constants to `config.py` with meaningful names:
-
-```python
-# Prompt truncation lengths
-PROMPT_LOG_TRUNCATE_LENGTH = 100
-PROMPT_SUMMARY_TRUNCATE_LENGTH = 200
-
-# Unique ID length
-UNIQUE_ID_LENGTH = 8
-
-# Progress logging interval
-PROGRESS_LOG_INTERVAL_SECONDS = 30
-```
-
-**Files to modify:**
-- `src/config.py`
-- `src/commands/createproject.py`
-
----
-
-## 4. Missing Type Hints
+## 2. Missing Type Hints
 
 **Location:** `src/commands/createproject.py` (lines 32-36, 58-63, 87-88)
 
@@ -162,7 +88,7 @@ async def update_file_tree_message(
 
 ---
 
-## 5. Side Effects at Import Time
+## 3. Side Effects at Import Time
 
 **Location:** `src/config.py` (lines 10, 18)
 
@@ -203,7 +129,7 @@ Then call `init_config()` in `run.py` before starting the bot.
 
 ---
 
-## 6. Duplicated Code in Message Update Functions
+## 4. Duplicated Code in Message Update Functions
 
 **Location:** `src/commands/createproject.py` (lines 32-55 and 58-84)
 
@@ -247,7 +173,7 @@ async def update_message_with_content(
 
 ---
 
-## 7. Long Function (createproject command handler)
+## 5. Long Function (createproject command handler)
 
 **Location:** `src/commands/createproject.py` (lines 105-325)
 
@@ -285,40 +211,7 @@ async def _send_summary(interaction: discord.Interaction, ...) -> None:
 
 ---
 
-## 8. Bare Exception Handling
-
-**Location:** `src/utils/folder_utils.py` (line 47-48)
-
-**Problem:**
-Bare `except Exception` that silently passes:
-
-```python
-except Exception:
-    pass
-```
-
-**Why it's bad:**
-- Hides encoding errors, permission issues, etc.
-- Makes debugging extremely difficult
-
-**Fix:**
-Log the exception and handle specific exceptions:
-
-```python
-except PermissionError:
-    logger.warning(f"Permission denied reading {folderignore_path}")
-except UnicodeDecodeError as e:
-    logger.warning(f"Encoding error in {folderignore_path}: {e}")
-except Exception as e:
-    logger.error(f"Unexpected error reading {folderignore_path}: {e}")
-```
-
-**Files to modify:**
-- `src/utils/folder_utils.py`
-
----
-
-## 9. Inconsistent Error Message Formatting
+## 6. Inconsistent Error Message Formatting
 
 **Location:** `src/commands/createproject.py` (lines 132-133, 153-154, 267)
 
@@ -352,7 +245,7 @@ def format_error_message(title: str, error: str, include_traceback: bool = True)
 
 ---
 
-## 10. Missing Input Validation
+## 7. Missing Input Validation
 
 **Location:** `src/commands/createproject.py` (line 105-109)
 
@@ -554,27 +447,27 @@ logger = get_logger()
 
 ## Summary
 
-| # | Anti-Pattern | Severity | Effort |
-|---|--------------|----------|--------|
-| 1 | Silent Exception Swallowing | High | Low |
-| 2 | Global Mutable State | Medium | Medium |
-| 3 | Hardcoded Magic Numbers | Low | Low |
-| 4 | Missing Type Hints | Low | Low |
-| 5 | Side Effects at Import Time | Medium | Medium |
-| 6 | Duplicated Code | Medium | Medium |
-| 7 | Long Function | Medium | High |
-| 8 | Bare Exception Handling | High | Low |
-| 9 | Inconsistent Error Formatting | Low | Low |
-| 10 | Missing Input Validation | High | Low |
-| 11 | Meaningless Test Assertion | Low | Low |
-| 12 | No Graceful Shutdown | Medium | Medium |
-| 13 | Race Condition Risk | Medium | Medium |
-| 14 | Logger Side Effects | Low | Low |
+| # | Anti-Pattern | Severity | Effort | Status |
+|---|--------------|----------|--------|--------|
+| 1 | Silent Exception Swallowing | High | Low | ✅ Fixed |
+| 2 | Global Mutable State | Medium | Medium | |
+| 3 | Hardcoded Magic Numbers | Low | Low | ✅ Fixed |
+| 4 | Missing Type Hints | Low | Low | |
+| 5 | Side Effects at Import Time | Medium | Medium | |
+| 6 | Duplicated Code | Medium | Medium | |
+| 7 | Long Function | Medium | High | |
+| 8 | Bare Exception Handling | High | Low | ✅ Fixed |
+| 9 | Inconsistent Error Formatting | Low | Low | |
+| 10 | Missing Input Validation | High | Low | |
+| 11 | Meaningless Test Assertion | Low | Low | |
+| 12 | No Graceful Shutdown | Medium | Medium | |
+| 13 | Race Condition Risk | Medium | Medium | |
+| 14 | Logger Side Effects | Low | Low | |
 
 **Recommended Fix Order:**
-1. #1, #8 - Silent exceptions (quick wins, high impact)
+1. ~~#1, #8 - Silent exceptions (quick wins, high impact)~~ ✅ Done
 2. #10 - Input validation (security)
-3. #3, #4 - Magic numbers and type hints (code quality)
+3. ~~#3~~ ✅ Done, #4 - Magic numbers and type hints (code quality)
 4. #11 - Fix meaningless test
 5. #9 - Error formatting consistency
 6. #5, #14 - Import-time side effects

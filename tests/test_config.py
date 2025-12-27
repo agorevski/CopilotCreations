@@ -11,7 +11,11 @@ from src.config import (
     UPDATE_INTERVAL,
     MAX_MESSAGE_LENGTH,
     COPILOT_DEFAULT_FLAGS,
-    BASE_DIR
+    BASE_DIR,
+    PROMPT_LOG_TRUNCATE_LENGTH,
+    PROMPT_SUMMARY_TRUNCATE_LENGTH,
+    UNIQUE_ID_LENGTH,
+    PROGRESS_LOG_INTERVAL_SECONDS
 )
 
 
@@ -48,3 +52,20 @@ class TestConfig:
         assert "--allow-all-paths" in COPILOT_DEFAULT_FLAGS
         assert "--allow-all-tools" in COPILOT_DEFAULT_FLAGS
         assert "--allow-all-urls" in COPILOT_DEFAULT_FLAGS
+    
+    def test_prompt_truncate_lengths(self):
+        """Test that prompt truncation lengths are positive."""
+        assert PROMPT_LOG_TRUNCATE_LENGTH > 0
+        assert PROMPT_LOG_TRUNCATE_LENGTH == 100
+        assert PROMPT_SUMMARY_TRUNCATE_LENGTH > 0
+        assert PROMPT_SUMMARY_TRUNCATE_LENGTH == 200
+    
+    def test_unique_id_length(self):
+        """Test that unique ID length is positive."""
+        assert UNIQUE_ID_LENGTH > 0
+        assert UNIQUE_ID_LENGTH == 8
+    
+    def test_progress_log_interval(self):
+        """Test that progress log interval is positive."""
+        assert PROGRESS_LOG_INTERVAL_SECONDS > 0
+        assert PROGRESS_LOG_INTERVAL_SECONDS == 30

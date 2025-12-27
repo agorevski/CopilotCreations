@@ -18,8 +18,13 @@ from ..config import (
     TIMEOUT_SECONDS,
     UPDATE_INTERVAL,
     MAX_MESSAGE_LENGTH,
-    COPILOT_DEFAULT_FLAGS
+    COPILOT_DEFAULT_FLAGS,
+    PROMPT_LOG_TRUNCATE_LENGTH,
+    PROMPT_SUMMARY_TRUNCATE_LENGTH,
+    UNIQUE_ID_LENGTH,
+    PROGRESS_LOG_INTERVAL_SECONDS
 )
+from ..utils.logging import logger
 from ..utils import (
     SessionLogCollector,
     sanitize_username,
@@ -48,10 +53,10 @@ async def update_file_tree_message(
             if content != last_content:
                 await message.edit(content=content)
                 last_content = content
-        except discord.errors.HTTPException:
-            pass
-        except Exception:
-            pass
+        except discord.errors.HTTPException as e:
+            logger.debug(f"HTTP error updating file tree message: {e}")
+        except Exception as e:
+            logger.warning(f"Unexpected error updating file tree message: {e}")
         await asyncio.sleep(UPDATE_INTERVAL)
 
 
@@ -77,10 +82,10 @@ async def update_output_message(
             if content != last_content:
                 await message.edit(content=content)
                 last_content = content
-        except discord.errors.HTTPException:
-            pass
-        except Exception:
-            pass
+        except discord.errors.HTTPException as e:
+            logger.debug(f"HTTP error updating output message: {e}")
+        except Exception as e:
+            logger.warning(f"Unexpected error updating output message: {e}")
         await asyncio.sleep(UPDATE_INTERVAL)
 
 
@@ -113,14 +118,14 @@ def setup_createproject_command(bot):
         # Create unique project folder
         username = sanitize_username(interaction.user.name)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        unique_id = str(uuid.uuid4())[:8]
+        unique_id = str(uuid.uuid4())[:UNIQUE_ID_LENGTH]
         folder_name = f"{username}_{timestamp}_{unique_id}"
         project_path = PROJECTS_DIR / folder_name
         
         # Initialize session log collector
         session_log = SessionLogCollector(folder_name)
         session_log.info(f"User '{interaction.user.name}' started /createproject")
-        session_log.info(f"Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}")
+        session_log.info(f"Prompt: {prompt[:PROMPT_LOG_TRUNCATE_LENGTH]}{'...' if len(prompt) > PROMPT_LOG_TRUNCATE_LENGTH else ''}")
         if model:
             session_log.info(f"Model: {model}")
         
@@ -190,8 +195,8 @@ def setup_createproject_command(bot):
             async def log_progress():
                 elapsed = 0
                 while is_running.is_set():
-                    await asyncio.sleep(30)
-                    elapsed += 30
+                    await asyncio.sleep(PROGRESS_LOG_INTERVAL_SECONDS)
+                    elapsed += PROGRESS_LOG_INTERVAL_SECONDS
                     if is_running.is_set():
                         session_log.info(f"Still executing... ({elapsed}s elapsed)")
             
@@ -257,8 +262,8 @@ def setup_createproject_command(bot):
                 truncated = truncate_output(full_output, available)
                 final_output_content = f"**🖥️ Copilot Output{model_info}:**\n```text\n{truncated}\n```"
             await output_msg.edit(content=final_output_content)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Error updating final messages: {e}")
         
         # Send summary message
         if timed_out:
@@ -300,7 +305,7 @@ def setup_createproject_command(bot):
 
 **Status:** {status}
 **Project Path:** `{project_path}`
-**Prompt:** {prompt[:200]}{'...' if len(prompt) > 200 else ''}
+**Prompt:** {prompt[:PROMPT_SUMMARY_TRUNCATE_LENGTH]}{'...' if len(prompt) > PROMPT_SUMMARY_TRUNCATE_LENGTH else ''}
 **Model:** {model if model else 'default'}
 **Files Created:** {file_count}
 **Directories Created:** {dir_count}

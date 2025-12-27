@@ -47,8 +47,19 @@ discord-copilot-bot/
 ## Code Style
 - Use type hints for function parameters
 - Use async/await for all I/O operations
-- Handle exceptions with full stack traces for debugging
+- **Always log exceptions** - never use bare `except: pass` blocks; log errors with appropriate levels (debug/warning/error)
+- Define magic numbers and strings as named constants in `config.py`
 - Sanitize user input for filesystem operations
+
+## Configuration Constants
+All magic numbers and strings should be defined in `src/config.py`:
+- `PROMPT_LOG_TRUNCATE_LENGTH` - Length for truncating prompts in logs (100 chars)
+- `PROMPT_SUMMARY_TRUNCATE_LENGTH` - Length for truncating prompts in summaries (200 chars)
+- `UNIQUE_ID_LENGTH` - Length of UUID prefix for unique identifiers (8 chars)
+- `PROGRESS_LOG_INTERVAL_SECONDS` - Interval for progress logging (30 seconds)
+- `TIMEOUT_SECONDS` - Process timeout duration
+- `UPDATE_INTERVAL` - Message update check interval
+- `MAX_MESSAGE_LENGTH` - Discord message character limit
 
 ## Testing
 - Test with Discord bot in a private server first

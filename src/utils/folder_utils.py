@@ -3,9 +3,12 @@ Folder and file utilities for the Discord Copilot Bot.
 """
 
 import fnmatch
+import logging
 import re
 from pathlib import Path
 from typing import Set, Tuple
+
+logger = logging.getLogger("copilot_bot")
 
 
 def sanitize_username(username: str) -> str:
@@ -44,8 +47,12 @@ def load_folderignore(base_path: Path) -> Set[str]:
                     if line and not line.startswith('#'):
                         # Remove trailing slash for matching
                         patterns.add(line.rstrip('/'))
-        except Exception:
-            pass
+        except PermissionError:
+            logger.warning(f"Permission denied reading {folderignore_path}")
+        except UnicodeDecodeError as e:
+            logger.warning(f"Encoding error in {folderignore_path}: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error reading {folderignore_path}: {e}")
     
     return patterns
 
