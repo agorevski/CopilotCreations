@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Discord Copilot Bot is a Discord bot that executes the `copilot-cli` tool to create projects based on user prompts. It provides real-time feedback on project creation progress through Discord messages.
+The Discord Copilot Bot is a Discord bot that executes the `copilot-cli` tool to create projects based on user prompts. It provides real-time feedback on project creation progress through Discord messages and optionally integrates with GitHub to automatically create repositories.
 
 ## Project Structure
 
@@ -28,7 +28,8 @@ CopilotCreations/
 │       ├── __init__.py
 │       ├── logging.py    # Logging and session log collector
 │       ├── folder_utils.py   # Folder tree and ignore pattern utilities
-│       └── text_utils.py # Text manipulation utilities
+│       ├── text_utils.py # Text manipulation utilities
+│       └── github.py     # GitHub integration utilities
 │
 ├── tests/                # Test suite
 │   ├── __init__.py
@@ -63,6 +64,7 @@ The Discord bot client class:
 
 Centralized configuration including:
 - Discord bot token
+- GitHub integration settings (`GITHUB_ENABLED`, `GITHUB_TOKEN`, `GITHUB_USERNAME`)
 - Project paths
 - Timeout settings
 - Message length limits
@@ -80,6 +82,7 @@ The main command that:
 2. Spawns the `copilot-cli` process
 3. Updates Discord messages with real-time progress
 4. Generates a log file upon completion
+5. Optionally creates a GitHub repository and pushes project files
 
 ### Utilities (`src/utils/`)
 
@@ -97,6 +100,15 @@ The main command that:
 
 #### `text_utils.py`
 - `truncate_output()`: Truncates text to fit Discord message limits
+
+#### `github.py`
+- `GitHubManager`: Class that manages GitHub repository operations
+  - `is_configured()`: Checks if GitHub integration is properly configured
+  - `copy_gitignore()`: Copies the root `.gitignore` to project directories
+  - `create_repository()`: Creates a new GitHub repository
+  - `init_and_push()`: Initializes git and pushes to GitHub
+  - `create_and_push_project()`: Complete workflow for GitHub integration
+- `github_manager`: Singleton instance for easy access
 
 ## Data Flow
 
@@ -136,6 +148,14 @@ User sends /createproject command
 │  Process Completes      │
 │  Generate Summary       │
 │  Attach Log File        │
+└───────────┬─────────────┘
+            │
+            ▼ (if GitHub enabled)
+┌─────────────────────────┐
+│  GitHub Integration     │
+│  - Copy .gitignore      │
+│  - Create repository    │
+│  - Init git & push      │
 └─────────────────────────┘
 ```
 
@@ -160,3 +180,10 @@ User sends /createproject command
 - Error messages displayed in Discord
 - Fallback mechanisms for failed operations
 - **All exceptions are logged** - no silent exception swallowing; errors are logged at appropriate levels (debug for HTTP errors, warning for unexpected errors)
+
+### GitHub Integration
+- **Optional feature** - Disabled by default, enable via `GITHUB_ENABLED=true` in `.env`
+- **Automatic .gitignore** - Copies root `.gitignore` to each project to keep repositories clean
+- **Private repositories** - All created repositories are private by default
+- **Authenticated push** - Uses Personal Access Token for secure git operations
+- **Graceful degradation** - If GitHub integration fails, project creation still succeeds

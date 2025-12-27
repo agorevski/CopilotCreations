@@ -12,6 +12,11 @@ load_dotenv()
 # Discord Configuration
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
+# GitHub Integration Configuration
+GITHUB_ENABLED = os.getenv("GITHUB_ENABLED", "false").lower() == "true"
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_USERNAME = os.getenv("GITHUB_USERNAME")
+
 # Project Paths
 BASE_DIR = Path(__file__).parent.parent
 PROJECTS_DIR = BASE_DIR / "projects"

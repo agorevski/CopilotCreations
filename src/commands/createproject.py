@@ -22,7 +22,8 @@ from ..config import (
     PROMPT_LOG_TRUNCATE_LENGTH,
     PROMPT_SUMMARY_TRUNCATE_LENGTH,
     UNIQUE_ID_LENGTH,
-    PROGRESS_LOG_INTERVAL_SECONDS
+    PROGRESS_LOG_INTERVAL_SECONDS,
+    GITHUB_ENABLED
 )
 from ..utils.logging import logger
 from ..utils import (
@@ -30,7 +31,8 @@ from ..utils import (
     sanitize_username,
     get_folder_tree,
     count_files_excluding_ignored,
-    truncate_output
+    truncate_output,
+    github_manager
 )
 
 
@@ -114,6 +116,9 @@ def setup_createproject_command(bot):
     ):
         """Handle the /createproject command."""
         await interaction.response.defer()
+        
+        # Log GitHub configuration status
+        logger.info(f"GitHub enabled: {GITHUB_ENABLED}, configured: {github_manager.is_configured()}")
         
         # Create unique project folder
         username = sanitize_username(interaction.user.name)
@@ -281,6 +286,43 @@ def setup_createproject_command(bot):
         
         session_log.info(f"Completed - Files: {file_count}, Directories: {dir_count}")
         
+        # GitHub Integration - Create repo and push if enabled and project succeeded
+        github_url = None
+        github_status = ""
+        logger.info(f"GitHub check: enabled={GITHUB_ENABLED}, timed_out={timed_out}, error_occurred={error_occurred}, returncode={process.returncode if process else 'None'}")
+        
+        if GITHUB_ENABLED and not timed_out and not error_occurred and process and process.returncode == 0:
+            if github_manager.is_configured():
+                session_log.info("Creating GitHub repository...")
+                logger.info(f"Creating GitHub repository: {folder_name}")
+                # Create a description from the prompt
+                repo_description = f"Created via Discord Copilot Bot: {prompt[:100]}{'...' if len(prompt) > 100 else ''}"
+                
+                success, message, github_url = github_manager.create_and_push_project(
+                    project_path=project_path,
+                    repo_name=folder_name,
+                    description=repo_description,
+                    private=True
+                )
+                
+                if success:
+                    session_log.info(f"GitHub: {message}")
+                    logger.info(f"GitHub repository created successfully: {github_url}")
+                    github_status = f"\n**🐙 GitHub:** [View Repository]({github_url})"
+                else:
+                    session_log.warning(f"GitHub: {message}")
+                    logger.warning(f"GitHub repository creation failed: {message}")
+                    github_status = f"\n**🐙 GitHub:** ⚠️ {message}"
+            else:
+                session_log.info("GitHub integration enabled but not configured")
+                logger.warning("GitHub enabled but not configured (missing GITHUB_TOKEN or GITHUB_USERNAME)")
+                github_status = "\n**🐙 GitHub:** Not configured (set GITHUB_TOKEN and GITHUB_USERNAME in .env)"
+        elif GITHUB_ENABLED and (timed_out or error_occurred or (process and process.returncode != 0)):
+            logger.info("GitHub skipped due to project creation failure")
+            github_status = "\n**🐙 GitHub:** Skipped due to project creation failure"
+        elif not GITHUB_ENABLED:
+            logger.debug("GitHub integration is disabled")
+        
         # Determine status text for log
         if timed_out:
             status_text = "TIMED OUT"
@@ -304,12 +346,11 @@ def setup_createproject_command(bot):
 **📋 Project Creation Summary**
 
 **Status:** {status}
-**Project Path:** `{project_path}`
-**Prompt:** {prompt[:PROMPT_SUMMARY_TRUNCATE_LENGTH]}{'...' if len(prompt) > PROMPT_SUMMARY_TRUNCATE_LENGTH else ''}
+**Prompt:**{prompt[:PROMPT_SUMMARY_TRUNCATE_LENGTH]}{'...' if len(prompt) > PROMPT_SUMMARY_TRUNCATE_LENGTH else ''}
 **Model:** {model if model else 'default'}
 **Files Created:** {file_count}
 **Directories Created:** {dir_count}
-**User:** {interaction.user.mention}
+**User:** {interaction.user.mention}{github_status}
 """
         
         try:

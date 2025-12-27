@@ -12,6 +12,7 @@ from .folder_utils import (
     sanitize_username
 )
 from .text_utils import truncate_output
+from .github import GitHubManager, github_manager
 
 __all__ = [
     "setup_logging",
@@ -22,5 +23,7 @@ __all__ = [
     "count_files_excluding_ignored",
     "get_folder_tree",
     "sanitize_username",
-    "truncate_output"
+    "truncate_output",
+    "GitHubManager",
+    "github_manager"
 ]
