@@ -13,10 +13,15 @@ import shutil
 from src.commands.createproject import (
     update_file_tree_message,
     update_output_message,
+    update_message_with_content,
     read_stream,
-    setup_createproject_command
+    setup_createproject_command,
+    _create_project_directory,
+    _send_initial_messages
 )
 from src.config import MAX_MESSAGE_LENGTH, PROJECTS_DIR
+from src.utils.async_buffer import AsyncOutputBuffer
+from src.utils.logging import SessionLogCollector
 
 
 class TestUpdateFileTreeMessage:
@@ -186,7 +191,9 @@ class TestUpdateOutputMessage:
     async def test_updates_with_buffer_content(self):
         """Test that output message updates with buffer content."""
         mock_message = AsyncMock()
-        output_buffer = ["Line 1\n", "Line 2\n"]
+        output_buffer = AsyncOutputBuffer()
+        await output_buffer.append("Line 1\n")
+        await output_buffer.append("Line 2\n")
         is_running = asyncio.Event()
         is_running.set()
         error_event = asyncio.Event()
@@ -209,7 +216,7 @@ class TestUpdateOutputMessage:
     async def test_shows_waiting_message_when_empty(self):
         """Test that waiting message is shown for empty buffer."""
         mock_message = AsyncMock()
-        output_buffer = []
+        output_buffer = AsyncOutputBuffer()
         is_running = asyncio.Event()
         is_running.set()
         error_event = asyncio.Event()
@@ -236,7 +243,8 @@ class TestUpdateOutputMessage:
         mock_message.edit.side_effect = discord.errors.HTTPException(
             MagicMock(), "Rate limited"
         )
-        output_buffer = ["test"]
+        output_buffer = AsyncOutputBuffer()
+        await output_buffer.append("test")
         is_running = asyncio.Event()
         is_running.set()
         error_event = asyncio.Event()
@@ -256,7 +264,8 @@ class TestUpdateOutputMessage:
         """Test that long output is truncated."""
         mock_message = AsyncMock()
         # Create very long output
-        output_buffer = ["x" * 10000]
+        output_buffer = AsyncOutputBuffer()
+        await output_buffer.append("x" * 10000)
         is_running = asyncio.Event()
         is_running.set()
         error_event = asyncio.Event()
@@ -280,7 +289,8 @@ class TestUpdateOutputMessage:
     async def test_stops_on_error_event(self):
         """Test that update stops when error event is set."""
         mock_message = AsyncMock()
-        output_buffer = ["test"]
+        output_buffer = AsyncOutputBuffer()
+        await output_buffer.append("test")
         is_running = asyncio.Event()
         is_running.set()
         error_event = asyncio.Event()
@@ -295,7 +305,8 @@ class TestUpdateOutputMessage:
         """Test that generic exceptions are handled gracefully."""
         mock_message = AsyncMock()
         mock_message.edit.side_effect = RuntimeError("Unexpected error")
-        output_buffer = ["test"]
+        output_buffer = AsyncOutputBuffer()
+        await output_buffer.append("test")
         is_running = asyncio.Event()
         is_running.set()
         error_event = asyncio.Event()
@@ -325,12 +336,13 @@ class TestReadStream:
             b""  # Empty signals EOF
         ])
         
-        output_buffer = []
+        output_buffer = AsyncOutputBuffer()
         await read_stream(mock_stream, output_buffer)
         
-        assert len(output_buffer) == 2
-        assert "Line 1\n" in output_buffer
-        assert "Line 2\n" in output_buffer
+        items = await output_buffer.get_list()
+        assert len(items) == 2
+        assert "Line 1\n" in items
+        assert "Line 2\n" in items
     
     @pytest.mark.asyncio
     async def test_handles_unicode(self):
@@ -341,11 +353,12 @@ class TestReadStream:
             b""
         ])
         
-        output_buffer = []
+        output_buffer = AsyncOutputBuffer()
         await read_stream(mock_stream, output_buffer)
         
-        assert len(output_buffer) == 1
-        assert "世界" in output_buffer[0]
+        items = await output_buffer.get_list()
+        assert len(items) == 1
+        assert "世界" in items[0]
     
     @pytest.mark.asyncio
     async def test_handles_invalid_utf8(self):
@@ -356,12 +369,13 @@ class TestReadStream:
             b""
         ])
         
-        output_buffer = []
+        output_buffer = AsyncOutputBuffer()
         await read_stream(mock_stream, output_buffer)
         
-        assert len(output_buffer) == 1
+        items = await output_buffer.get_list()
+        assert len(items) == 1
         # Should contain replacement characters or partial content
-        assert "Invalid" in output_buffer[0]
+        assert "Invalid" in items[0]
     
     @pytest.mark.asyncio
     async def test_empty_stream(self):
@@ -369,10 +383,11 @@ class TestReadStream:
         mock_stream = AsyncMock()
         mock_stream.readline = AsyncMock(side_effect=[b""])
         
-        output_buffer = []
+        output_buffer = AsyncOutputBuffer()
         await read_stream(mock_stream, output_buffer)
         
-        assert len(output_buffer) == 0
+        items = await output_buffer.get_list()
+        assert len(items) == 0
 
 
 class TestSetupCreateprojectCommand:
@@ -475,3 +490,83 @@ class TestCreateprojectCommandHandler:
         
         # Verify defer was called
         mock_interaction.response.defer.assert_called_once()
+
+
+class TestUpdateMessageWithContent:
+    """Tests for the generic update_message_with_content function."""
+    
+    @pytest.mark.asyncio
+    async def test_updates_when_content_changes(self):
+        """Test that message is updated when content changes."""
+        mock_message = AsyncMock()
+        call_count = [0]
+        
+        def content_generator():
+            call_count[0] += 1
+            return f"Content {call_count[0]}"
+        
+        is_running = asyncio.Event()
+        is_running.set()
+        error_event = asyncio.Event()
+        
+        async def stop_after_delay():
+            await asyncio.sleep(0.15)
+            is_running.clear()
+        
+        await asyncio.gather(
+            update_message_with_content(mock_message, content_generator, is_running, error_event),
+            stop_after_delay()
+        )
+        
+        # Should have called edit at least once
+        assert mock_message.edit.called
+    
+    @pytest.mark.asyncio
+    async def test_stops_on_error_event(self):
+        """Test that update stops when error event is set."""
+        mock_message = AsyncMock()
+        is_running = asyncio.Event()
+        is_running.set()
+        error_event = asyncio.Event()
+        error_event.set()  # Set error immediately
+        
+        await update_message_with_content(mock_message, lambda: "test", is_running, error_event)
+        
+        # Should not have called edit since error was set
+        assert not mock_message.edit.called
+
+
+class TestHelperFunctions:
+    """Tests for extracted helper functions."""
+    
+    @pytest.mark.asyncio
+    async def test_create_project_directory(self):
+        """Test that _create_project_directory creates a directory."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch('src.commands.createproject.PROJECTS_DIR', Path(tmpdir)):
+                session_log = SessionLogCollector("test_session")
+                
+                project_path, folder_name = await _create_project_directory("testuser", session_log)
+                
+                assert project_path.exists()
+                assert "testuser" in folder_name
+    
+    @pytest.mark.asyncio
+    async def test_send_initial_messages(self):
+        """Test that _send_initial_messages sends two messages."""
+        mock_interaction = AsyncMock()
+        mock_file_tree_msg = AsyncMock()
+        mock_output_msg = AsyncMock()
+        
+        mock_interaction.followup.send = AsyncMock(return_value=mock_file_tree_msg)
+        mock_interaction.channel.send = AsyncMock(return_value=mock_output_msg)
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_path = Path(tmpdir)
+            
+            file_tree_msg, output_msg = await _send_initial_messages(
+                mock_interaction, project_path, None
+            )
+            
+            assert mock_interaction.followup.send.called
+            assert mock_interaction.channel.send.called

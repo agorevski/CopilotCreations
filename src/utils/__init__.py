@@ -13,6 +13,7 @@ from .folder_utils import (
 )
 from .text_utils import truncate_output
 from .github import GitHubManager, github_manager
+from .async_buffer import AsyncOutputBuffer
 
 __all__ = [
     "setup_logging",
@@ -25,5 +26,6 @@ __all__ = [
     "sanitize_username",
     "truncate_output",
     "GitHubManager",
-    "github_manager"
+    "github_manager",
+    "AsyncOutputBuffer"
 ]

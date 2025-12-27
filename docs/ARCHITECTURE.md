@@ -17,8 +17,8 @@ CopilotCreations/
 │
 ├── src/                   # Source code
 │   ├── __init__.py       # Package marker with version
-│   ├── bot.py            # Discord bot client
-│   ├── config.py         # Configuration settings
+│   ├── bot.py            # Discord bot client with factory pattern
+│   ├── config.py         # Configuration settings with explicit init
 │   │
 │   ├── commands/         # Discord slash commands
 │   │   ├── __init__.py
@@ -29,13 +29,19 @@ CopilotCreations/
 │       ├── logging.py    # Logging and session log collector
 │       ├── folder_utils.py   # Folder tree and ignore pattern utilities
 │       ├── text_utils.py # Text manipulation utilities
-│       └── github.py     # GitHub integration utilities
+│       ├── github.py     # GitHub integration utilities
+│       └── async_buffer.py   # Thread-safe async output buffer
 │
 ├── tests/                # Test suite
 │   ├── __init__.py
+│   ├── test_async_buffer.py
+│   ├── test_bot.py
+│   ├── test_config.py
+│   ├── test_createproject.py
 │   ├── test_folder_utils.py
-│   ├── test_text_utils.py
-│   └── test_logging.py
+│   ├── test_github.py
+│   ├── test_logging.py
+│   └── test_text_utils.py
 │
 ├── docs/                 # Documentation
 │   ├── ARCHITECTURE.md   # This file
@@ -49,20 +55,33 @@ CopilotCreations/
 ### Entry Point (`run.py`)
 
 The main entry point that:
-- Imports the bot instance
+- Calls `init_config()` to load environment and create directories
+- Gets bot instance via `get_bot()` factory function
 - Sets up commands
 - Starts the bot
 
 ### Bot Client (`src/bot.py`)
 
-The Discord bot client class:
-- Extends `discord.Client`
-- Manages the command tree for slash commands
-- Handles the `on_ready` event
+The Discord bot client module provides:
+- `CopilotBot` class extending `discord.Client`
+- **Factory Functions:**
+  - `get_bot()` - Returns singleton bot instance
+  - `create_bot()` - Creates new instance (for testing)
+  - `reset_bot()` - Resets singleton (for testing)
+- **Graceful Shutdown:**
+  - `setup_signal_handlers()` - Registers SIGINT/SIGTERM handlers
+  - `cleanup()` - Async cleanup method for resources
+- `on_ready_handler()` - Handles bot ready event
+- `run_bot()` - Main entry point to start the bot
 
 ### Configuration (`src/config.py`)
 
-Centralized configuration including:
+Centralized configuration with explicit initialization:
+- **`init_config()`** - Must be called at startup to:
+  - Load `.env` file via `load_dotenv()`
+  - Create `PROJECTS_DIR` directory
+  - Set configuration variables
+- **`is_initialized()`** - Check if config has been initialized
 - Discord bot token
 - GitHub integration settings (`GITHUB_ENABLED`, `GITHUB_TOKEN`, `GITHUB_USERNAME`)
 - Project paths
@@ -77,14 +96,29 @@ Centralized configuration including:
 
 #### `/createproject` Command
 
-The main command that:
-1. Creates a unique project folder
-2. Spawns the `copilot-cli` process
-3. Updates Discord messages with real-time progress
-4. Generates a log file upon completion
-5. Optionally creates a GitHub repository and pushes project files
+The main command is organized into modular helper functions:
+
+**Helper Functions:**
+- `_create_project_directory()` - Creates unique project folder
+- `_send_initial_messages()` - Sends Discord messages for progress tracking
+- `_run_copilot_process()` - Executes copilot CLI with timeout handling
+- `_update_final_messages()` - Updates Discord messages with final state
+- `_handle_github_integration()` - Creates GitHub repo and pushes code
+- `_send_summary()` - Sends final summary with log attachment
+
+**Shared Utilities:**
+- `update_message_with_content()` - Generic message updater (DRY pattern)
+- `update_file_tree_message()` - Updates file tree display
+- `update_output_message()` - Updates command output display
+- `read_stream()` - Reads process output to async buffer
 
 ### Utilities (`src/utils/`)
+
+#### `async_buffer.py`
+- `AsyncOutputBuffer` class - Thread-safe buffer for concurrent async operations
+  - Uses `asyncio.Lock` for atomic operations
+  - `append()` / `get_content()` - Async methods
+  - `append_sync()` / `get_content_sync()` - Sync fallbacks
 
 #### `logging.py`
 - `setup_logging()`: Configures the application logger
@@ -124,13 +158,20 @@ User sends /createproject command
             ▼
 ┌─────────────────────────┐
 │  Create Project Folder  │
-│  Initialize Logger      │
+│  _create_project_directory()
 └───────────┬─────────────┘
             │
             ▼
 ┌─────────────────────────┐
-│  Spawn copilot-cli      │
-│  Process                │
+│  Send Initial Messages  │
+│  _send_initial_messages()
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│  Run Copilot Process    │
+│  _run_copilot_process() │
+│  (uses AsyncOutputBuffer)
 └───────────┬─────────────┘
             │
       ┌─────┴─────┐
@@ -145,17 +186,20 @@ User sends /createproject command
             │
             ▼
 ┌─────────────────────────┐
-│  Process Completes      │
-│  Generate Summary       │
-│  Attach Log File        │
+│  Update Final Messages  │
+│  _update_final_messages()
 └───────────┬─────────────┘
             │
             ▼ (if GitHub enabled)
 ┌─────────────────────────┐
 │  GitHub Integration     │
-│  - Copy .gitignore      │
-│  - Create repository    │
-│  - Init git & push      │
+│  _handle_github_integration()
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│  Send Summary           │
+│  _send_summary()        │
 └─────────────────────────┘
 ```
 
@@ -164,6 +208,16 @@ User sends /createproject command
 ### Real-time Updates
 - File tree and output messages update every 1 second
 - Only sends updates when content changes (rate limit friendly)
+
+### Thread-Safe Operations
+- `AsyncOutputBuffer` provides atomic append and read operations
+- Uses `asyncio.Lock` to prevent race conditions
+- Safe for concurrent access from multiple async tasks
+
+### Graceful Shutdown
+- Signal handlers for SIGINT and SIGTERM
+- Clean resource cleanup before exit
+- Proper Discord connection termination
 
 ### Folder Ignore Patterns
 - `.folderignore` file works like `.gitignore`
@@ -187,3 +241,28 @@ User sends /createproject command
 - **Private repositories** - All created repositories are private by default
 - **Authenticated push** - Uses Personal Access Token for secure git operations
 - **Graceful degradation** - If GitHub integration fails, project creation still succeeds
+
+## Design Patterns
+
+### Factory Pattern
+Bot instances are created via factory functions (`get_bot()`, `create_bot()`) rather than direct instantiation, enabling:
+- Better testability with isolated instances
+- Singleton management for production use
+- Easy reset for test cleanup
+
+### Explicit Initialization
+Configuration is loaded via `init_config()` at startup rather than at import time:
+- No side effects during module import
+- Easier testing without unwanted file I/O
+- Clear initialization sequence in `run.py`
+
+### DRY (Don't Repeat Yourself)
+Common patterns are extracted into reusable functions:
+- `update_message_with_content()` for generic message updates
+- Helper functions for each distinct responsibility
+
+### Single Responsibility
+Long functions are broken into focused helper functions:
+- Each function does one thing well
+- Easier to test individual components
+- Better code organization and readability

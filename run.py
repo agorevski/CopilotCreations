@@ -5,10 +5,15 @@ A Discord bot that executes copilot-cli to create projects based on user prompts
 Entry point for the application.
 """
 
-from src.bot import bot, run_bot
+from src.config import init_config
+from src.bot import get_bot, run_bot
 from src.commands import setup_createproject_command
 
-# Set up commands
+# Initialize configuration (load .env, create directories)
+init_config()
+
+# Get bot instance and set up commands
+bot = get_bot()
 setup_createproject_command(bot)
 
 if __name__ == "__main__":

@@ -9,6 +9,8 @@ A Discord bot that executes `copilot-cli` to create projects based on user promp
 - 30-minute timeout protection with concurrent user support
 - Session logging with markdown log file attachments
 - **GitHub Integration** - Automatically create repositories and push project files
+- **Graceful Shutdown** - Proper signal handling for clean process termination
+- **Thread-Safe Operations** - Async-safe output buffering prevents race conditions
 
 ## Quick Start
 
@@ -48,6 +50,13 @@ To set up GitHub integration:
 1. Create a Personal Access Token at https://github.com/settings/tokens
 2. Required scopes: `repo` (Full control of private repositories)
 3. Add credentials to your `.env` file
+
+## Architecture Highlights
+
+- **Factory Pattern** - Bot instances are created via `get_bot()` factory function for better testability
+- **Explicit Initialization** - Configuration is loaded via `init_config()` at startup, not at import time
+- **Modular Design** - Long command handlers are broken into focused helper functions
+- **Thread-Safe Buffers** - `AsyncOutputBuffer` class provides race-condition-free concurrent access
 
 ## Documentation
 

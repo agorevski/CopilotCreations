@@ -18,6 +18,12 @@ discord-copilot-bot/
 ├── README.md       # Documentation
 ├── requirements.txt # Python dependencies
 ├── run.py          # Main bot entry point
+├── src/            # Source code
+│   ├── bot.py      # Discord bot client with factory pattern
+│   ├── config.py   # Configuration with explicit initialization
+│   ├── commands/   # Discord slash commands
+│   └── utils/      # Utility modules including async_buffer.py
+├── tests/          # Test suite
 └── projects/       # Generated projects directory (not in git)
 ```
 
@@ -25,31 +31,43 @@ discord-copilot-bot/
 
 ### Discord Bot
 - Uses `discord.py` with `app_commands` for slash commands
-- Single-file architecture in `run.py`
+- **Factory Pattern** - Bot instances are created via `get_bot()` function
+- **Explicit Initialization** - Configuration is loaded via `init_config()` at startup
 - Async/await patterns throughout
 
 ### Subprocess Management
 - Uses `asyncio.create_subprocess_exec` for spawning copilot
 - 30-minute timeout on all subprocesses
 - Concurrent user support (each command spawns separate process)
+- **Graceful Shutdown** - Signal handlers for clean termination (SIGINT, SIGTERM)
 
 ### Message Updates
-- File tree message updates every 5 seconds
-- Output window updates every 3 seconds (rolling 2000 char limit)
+- File tree message updates every 1 second (only when content changes)
+- Output window updates every 1 second (only when content changes)
+- **Thread-Safe Buffers** - `AsyncOutputBuffer` class for race-condition-free concurrent access
 - Final summary message on completion
+
+### Code Organization
+- **Modular Functions** - Long command handlers are broken into focused helper functions
+- **DRY Principle** - Common patterns extracted into reusable utilities
+- **Single Responsibility** - Each function does one thing well
 
 ## Environment Variables
 - `DISCORD_BOT_TOKEN` - Required Discord bot token
+- `GITHUB_ENABLED` - Enable GitHub integration (default: false)
+- `GITHUB_TOKEN` - GitHub Personal Access Token
+- `GITHUB_USERNAME` - GitHub username
 
 ## Commands
 - `/createproject prompt:<text> [model:<model>]` - Main command
 
 ## Code Style
-- Use type hints for function parameters
+- Use type hints for function parameters and return types
 - Use async/await for all I/O operations
 - **Always log exceptions** - never use bare `except: pass` blocks; log errors with appropriate levels (debug/warning/error)
 - Define magic numbers and strings as named constants in `config.py`
 - Sanitize user input for filesystem operations
+- **Avoid import-time side effects** - use explicit initialization functions
 
 ## Configuration Constants
 All magic numbers and strings should be defined in `src/config.py`:
@@ -65,6 +83,7 @@ All magic numbers and strings should be defined in `src/config.py`:
 - Test with Discord bot in a private server first
 - Verify concurrent command handling
 - Test timeout behavior with long-running prompts
+- Use `create_bot()` for test isolation (creates new instances)
 
 ## Future Considerations
 - Docker integration planned for later

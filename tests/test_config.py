@@ -15,7 +15,9 @@ from src.config import (
     PROMPT_LOG_TRUNCATE_LENGTH,
     PROMPT_SUMMARY_TRUNCATE_LENGTH,
     UNIQUE_ID_LENGTH,
-    PROGRESS_LOG_INTERVAL_SECONDS
+    PROGRESS_LOG_INTERVAL_SECONDS,
+    init_config,
+    is_initialized
 )
 
 
@@ -69,3 +71,24 @@ class TestConfig:
         """Test that progress log interval is positive."""
         assert PROGRESS_LOG_INTERVAL_SECONDS > 0
         assert PROGRESS_LOG_INTERVAL_SECONDS == 30
+
+
+class TestConfigInitialization:
+    """Tests for configuration initialization."""
+    
+    def test_init_config_can_be_called(self):
+        """Test that init_config can be called without error."""
+        # Should not raise any exceptions
+        init_config()
+    
+    def test_init_config_is_idempotent(self):
+        """Test that init_config can be called multiple times safely."""
+        init_config()
+        init_config()
+        init_config()
+        # Should not raise any exceptions
+    
+    def test_is_initialized_returns_bool(self):
+        """Test that is_initialized returns a boolean."""
+        result = is_initialized()
+        assert isinstance(result, bool)

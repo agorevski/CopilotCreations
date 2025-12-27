@@ -7,7 +7,11 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+# Load environment variables (safe - just reads .env file)
 load_dotenv()
+
+# Track initialization state for directory creation
+_initialized = False
 
 # Discord Configuration
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
@@ -20,7 +24,28 @@ GITHUB_USERNAME = os.getenv("GITHUB_USERNAME")
 # Project Paths
 BASE_DIR = Path(__file__).parent.parent
 PROJECTS_DIR = BASE_DIR / "projects"
-PROJECTS_DIR.mkdir(exist_ok=True)
+
+
+def init_config() -> None:
+    """Initialize configuration by creating required directories.
+    
+    This function should be called once at application startup.
+    It's safe to call multiple times.
+    """
+    global _initialized
+    
+    if _initialized:
+        return
+    
+    # Create projects directory
+    PROJECTS_DIR.mkdir(exist_ok=True)
+    
+    _initialized = True
+
+
+def is_initialized() -> bool:
+    """Check if configuration has been initialized."""
+    return _initialized
 
 # Timeout Configuration
 TIMEOUT_SECONDS = 30 * 60  # 30 minutes
