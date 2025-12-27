@@ -51,6 +51,12 @@ To set up GitHub integration:
 2. Required scopes: `repo` (Full control of private repositories)
 3. Add credentials to your `.env` file
 
+## Prompt Configuration
+
+The `config.yaml` file contains prompt templates that are prepended to user prompts for specific commands. This allows customization of the base requirements for project creation (e.g., requiring CI/CD pipelines, documentation, test coverage).
+
+See the file for available configuration options.
+
 ## Architecture Highlights
 
 - **Factory Pattern** - Bot instances are created via `get_bot()` factory function for better testability

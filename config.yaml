@@ -1,0 +1,34 @@
+# Copilot Prompt Configuration
+# These templates are prepended to user prompts for specific commands.
+# Use YAML multiline syntax (|) for readability.
+
+createproject: |
+  On top of what will be explained below, this is a brand new project that should have everything that a professional developer comes to expect from a brand new project. A CI/CD pipeline, Unit Tests, a professional directory structure, gitignore files, and documentation.
+
+  The directory structure should look something like this:
+  ```
+  root/
+  ├── run.py                # Application entry point
+  ├── requirements.txt      # Python dependencies
+  ├── .env.example          # Example environment file (if applicable)
+  ├── .gitignore            # Git ignore patterns
+  │
+  ├── .github/workflows/    # Github actions to compile any projects and run unit tests
+  │    ...
+  ├── src/                  # Source code
+  │    ...
+  ├── tests/                # Test suite
+  │    ...
+  ├── docs/                 # Documentation
+      ├── ARCHITECTURE.md   # Architectural information
+      ├── SUGGESTIONS.md    # Additional suggestions to further improve upon the current design
+      └── USAGE.md          # User guide
+  ```
+
+  Please ensure that documentation is exhaustive and complete, and that unit test coverage at the end of this run is at least 75% before completing the task.
+
+  On top of what is explained by the user prompt below, the following criteria is required for the folder structure:
+  - Always create a docs/ directory with comprehensive documentation
+  - Always include a .github/workflows/ directory with CI/CD pipeline configuration
+  - Always include unit tests with good coverage
+  - Follow best practices for the language/framework being used

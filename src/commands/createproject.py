@@ -17,6 +17,7 @@ from discord import app_commands
 from ..config import (
     PROJECTS_DIR,
     TIMEOUT_SECONDS,
+    TIMEOUT_MINUTES,
     UPDATE_INTERVAL,
     MAX_MESSAGE_LENGTH,
     COPILOT_DEFAULT_FLAGS,
@@ -26,7 +27,8 @@ from ..config import (
     PROGRESS_LOG_INTERVAL_SECONDS,
     GITHUB_ENABLED,
     MAX_PROMPT_LENGTH,
-    MODEL_NAME_PATTERN
+    MODEL_NAME_PATTERN,
+    get_prompt_template
 )
 from ..utils.logging import logger
 from ..utils import (
@@ -180,7 +182,7 @@ async def _send_initial_messages(
 
 async def _run_copilot_process(
     project_path: Path,
-    prompt: str,
+    full_prompt: str,
     model: Optional[str],
     session_log: SessionLogCollector,
     output_buffer: AsyncOutputBuffer,
@@ -189,11 +191,20 @@ async def _run_copilot_process(
 ) -> Tuple[bool, bool, str, Optional[asyncio.subprocess.Process]]:
     """Run the copilot process and return status.
     
+    Args:
+        project_path: Path to the project directory.
+        full_prompt: The full prompt including any prepended templates.
+        model: Optional model name.
+        session_log: Session log collector.
+        output_buffer: Async output buffer.
+        is_running: Event that signals if the process is still running.
+        error_event: Event that signals if an error has occurred.
+    
     Returns:
         Tuple of (timed_out, error_occurred, error_message, process)
     """
     # Build command
-    cmd = ["copilot", "-p", prompt] + COPILOT_DEFAULT_FLAGS
+    cmd = ["copilot", "-p", full_prompt] + COPILOT_DEFAULT_FLAGS
     if model:
         cmd.extend(["--model", model])
     
@@ -233,8 +244,8 @@ async def _run_copilot_process(
             timed_out = True
             process.kill()
             await process.wait()
-            await output_buffer.append("\n\n⏰ TIMEOUT: Process killed after 30 minutes.\n")
-            session_log.warning("Process timed out after 30 minutes")
+            await output_buffer.append(f"\n\n⏰ TIMEOUT: Process killed after {TIMEOUT_MINUTES} minutes.\n")
+            session_log.warning(f"Process timed out after {TIMEOUT_MINUTES} minutes")
         
         progress_task.cancel()
         try:
@@ -354,7 +365,7 @@ async def _send_summary(
     """Send the final summary message with log attachment."""
     # Determine status
     if timed_out:
-        status = "⏰ **TIMED OUT** - Process was killed after 30 minutes"
+        status = f"⏰ **TIMED OUT** - Process was killed after {TIMEOUT_MINUTES} minutes"
         status_text = "TIMED OUT"
     elif error_occurred:
         status = format_error_message("ERROR", error_message)
@@ -460,6 +471,14 @@ def setup_createproject_command(bot) -> Callable:
         if model:
             session_log.info(f"Model: {model}")
         
+        # Build full prompt with template prepended (user prompt is kept separate for display)
+        prompt_template = get_prompt_template('createproject')
+        if prompt_template:
+            full_prompt = f"{prompt_template}\n\n{prompt}"
+            session_log.info("Prompt template prepended from config.yaml")
+        else:
+            full_prompt = prompt
+        
         # Create project directory
         try:
             project_path, folder_name = await _create_project_directory(username, session_log)
@@ -491,9 +510,9 @@ def setup_createproject_command(bot) -> Callable:
         )
         
         try:
-            # Run the copilot process
+            # Run the copilot process with full prompt (includes template)
             timed_out, error_occurred, error_message, process = await _run_copilot_process(
-                project_path, prompt, model, session_log, output_buffer, is_running, error_event
+                project_path, full_prompt, model, session_log, output_buffer, is_running, error_event
             )
         finally:
             is_running.clear()

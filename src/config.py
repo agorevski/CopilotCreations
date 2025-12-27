@@ -5,6 +5,7 @@ Configuration settings for the Discord Copilot Bot.
 import os
 from pathlib import Path
 
+import yaml
 from dotenv import load_dotenv
 
 # Load environment variables (safe - just reads .env file)
@@ -24,15 +25,19 @@ GITHUB_USERNAME = os.getenv("GITHUB_USERNAME")
 # Project Paths
 BASE_DIR = Path(__file__).parent.parent
 PROJECTS_DIR = BASE_DIR / "projects"
+CONFIG_YAML_PATH = BASE_DIR / "config.yaml"
+
+# Prompt templates loaded from config.yaml
+PROMPT_TEMPLATES: dict = {}
 
 
 def init_config() -> None:
-    """Initialize configuration by creating required directories.
+    """Initialize configuration by creating required directories and loading config.yaml.
     
     This function should be called once at application startup.
     It's safe to call multiple times.
     """
-    global _initialized
+    global _initialized, PROMPT_TEMPLATES
     
     if _initialized:
         return
@@ -40,7 +45,27 @@ def init_config() -> None:
     # Create projects directory
     PROJECTS_DIR.mkdir(exist_ok=True)
     
+    # Load prompt templates from config.yaml
+    if CONFIG_YAML_PATH.exists():
+        try:
+            with open(CONFIG_YAML_PATH, 'r', encoding='utf-8') as f:
+                PROMPT_TEMPLATES.update(yaml.safe_load(f) or {})
+        except Exception:
+            pass  # Silently ignore config.yaml errors, use empty templates
+    
     _initialized = True
+
+
+def get_prompt_template(command_name: str) -> str:
+    """Get the prompt template for a specific command.
+    
+    Args:
+        command_name: The name of the command (e.g., 'createproject')
+        
+    Returns:
+        The prompt template string, or empty string if not found.
+    """
+    return PROMPT_TEMPLATES.get(command_name, "")
 
 
 def is_initialized() -> bool:
@@ -48,7 +73,8 @@ def is_initialized() -> bool:
     return _initialized
 
 # Timeout Configuration
-TIMEOUT_SECONDS = 30 * 60  # 30 minutes
+TIMEOUT_MINUTES = int(os.getenv("TIMEOUT_MINUTES", "30"))
+TIMEOUT_SECONDS = TIMEOUT_MINUTES * 60
 
 # Discord Message Configuration
 UPDATE_INTERVAL = 1  # seconds - check for changes every second

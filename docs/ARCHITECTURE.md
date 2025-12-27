@@ -10,6 +10,7 @@ The Discord Copilot Bot is a Discord bot that executes the `copilot-cli` tool to
 CopilotCreations/
 ├── run.py                 # Application entry point
 ├── requirements.txt       # Python dependencies
+├── config.yaml           # Prompt templates for commands
 ├── .env                   # Environment variables (not in git)
 ├── .env.example          # Example environment file
 ├── .folderignore         # Patterns for folders to collapse in tree view
@@ -73,6 +74,14 @@ The Discord bot client module provides:
   - `cleanup()` - Async cleanup method for resources
 - `on_ready_handler()` - Handles bot ready event
 - `run_bot()` - Main entry point to start the bot
+
+### Prompt Configuration (`config.yaml`)
+
+YAML file containing prompt templates that are prepended to user prompts:
+- **`createproject`** - Template prepended to `/createproject` prompts
+  - Defines professional project requirements (CI/CD, tests, documentation)
+  - Specifies expected directory structure
+  - Sets quality standards (e.g., 75% test coverage)
 
 ### Configuration (`src/config.py`)
 
