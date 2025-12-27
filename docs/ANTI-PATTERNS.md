@@ -291,7 +291,7 @@ if model and not re.match(r'^[a-zA-Z0-9\-_.]+$', model):
 
 ---
 
-## 11. Test Assertion Without Message
+## 8. Test Assertion Without Message
 
 **Location:** `tests/test_bot.py` (line 23)
 
@@ -323,7 +323,7 @@ def test_discord_token_config_accessible(self):
 
 ---
 
-## 12. No Graceful Shutdown Handling
+## 9. No Graceful Shutdown Handling
 
 **Location:** `src/bot.py`
 
@@ -363,7 +363,7 @@ def setup_signal_handlers(bot: CopilotBot):
 
 ---
 
-## 13. Potential Race Condition in Output Buffer
+## 10. Potential Race Condition in Output Buffer
 
 **Location:** `src/commands/createproject.py` (lines 157, 187, 251-253)
 
@@ -407,7 +407,7 @@ class AsyncOutputBuffer:
 
 ---
 
-## 14. Unused Import in Utilities
+## 11. Unused Import in Utilities
 
 **Location:** `src/utils/logging.py` (line 1-7)
 
@@ -447,30 +447,26 @@ logger = get_logger()
 
 ## Summary
 
-| # | Anti-Pattern | Severity | Effort | Status |
-|---|--------------|----------|--------|--------|
-| 1 | Silent Exception Swallowing | High | Low | ✅ Fixed |
-| 2 | Global Mutable State | Medium | Medium | |
-| 3 | Hardcoded Magic Numbers | Low | Low | ✅ Fixed |
-| 4 | Missing Type Hints | Low | Low | |
-| 5 | Side Effects at Import Time | Medium | Medium | |
-| 6 | Duplicated Code | Medium | Medium | |
-| 7 | Long Function | Medium | High | |
-| 8 | Bare Exception Handling | High | Low | ✅ Fixed |
-| 9 | Inconsistent Error Formatting | Low | Low | |
-| 10 | Missing Input Validation | High | Low | |
-| 11 | Meaningless Test Assertion | Low | Low | |
-| 12 | No Graceful Shutdown | Medium | Medium | |
-| 13 | Race Condition Risk | Medium | Medium | |
-| 14 | Logger Side Effects | Low | Low | |
+| # | Anti-Pattern | Severity | Effort |
+|---|--------------|----------|--------|
+| 1 | Global Mutable State | Medium | Medium |
+| 2 | Missing Type Hints | Low | Low |
+| 3 | Side Effects at Import Time | Medium | Medium |
+| 4 | Duplicated Code | Medium | Medium |
+| 5 | Long Function | Medium | High |
+| 6 | Inconsistent Error Formatting | Low | Low |
+| 7 | Missing Input Validation | High | Low |
+| 8 | Meaningless Test Assertion | Low | Low |
+| 9 | No Graceful Shutdown | Medium | Medium |
+| 10 | Race Condition Risk | Medium | Medium |
+| 11 | Logger Side Effects | Low | Low |
 
 **Recommended Fix Order:**
-1. ~~#1, #8 - Silent exceptions (quick wins, high impact)~~ ✅ Done
-2. #10 - Input validation (security)
-3. ~~#3~~ ✅ Done, #4 - Magic numbers and type hints (code quality)
-4. #11 - Fix meaningless test
-5. #9 - Error formatting consistency
-6. #5, #14 - Import-time side effects
-7. #6 - DRY violations
-8. #2, #7 - Refactoring (larger changes)
-9. #12, #13 - Infrastructure improvements
+1. #7 - Input validation (security)
+2. #2 - Type hints (code quality)
+3. #8 - Fix meaningless test
+4. #6 - Error formatting consistency
+5. #3, #11 - Import-time side effects
+6. #4 - DRY violations
+7. #1, #5 - Refactoring (larger changes)
+8. #9, #10 - Infrastructure improvements
