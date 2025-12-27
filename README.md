@@ -57,6 +57,9 @@ To set up GitHub integration:
 - **Explicit Initialization** - Configuration is loaded via `init_config()` at startup, not at import time
 - **Modular Design** - Long command handlers are broken into focused helper functions
 - **Thread-Safe Buffers** - `AsyncOutputBuffer` class provides race-condition-free concurrent access
+- **Input Validation** - Prompt length and model name format are validated before processing
+- **Consistent Error Formatting** - All error messages use `format_error_message()` for uniform UX
+- **Singleton Logger** - Logger uses lazy initialization pattern to avoid import-time side effects
 
 ## Documentation
 

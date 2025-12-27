@@ -2,7 +2,7 @@
 Utility modules for the Discord Copilot Bot.
 """
 
-from .logging import setup_logging, SessionLogCollector
+from .logging import setup_logging, get_logger, SessionLogCollector
 from .folder_utils import (
     load_folderignore,
     is_ignored,
@@ -11,12 +11,13 @@ from .folder_utils import (
     get_folder_tree,
     sanitize_username
 )
-from .text_utils import truncate_output
+from .text_utils import truncate_output, format_error_message
 from .github import GitHubManager, github_manager
 from .async_buffer import AsyncOutputBuffer
 
 __all__ = [
     "setup_logging",
+    "get_logger",
     "SessionLogCollector",
     "load_folderignore",
     "is_ignored",
@@ -25,6 +26,7 @@ __all__ = [
     "get_folder_tree",
     "sanitize_username",
     "truncate_output",
+    "format_error_message",
     "GitHubManager",
     "github_manager",
     "AsyncOutputBuffer"

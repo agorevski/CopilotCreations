@@ -4,6 +4,7 @@ Create project command for the Discord Copilot Bot.
 
 import asyncio
 import io
+import re
 import traceback
 import uuid
 from datetime import datetime
@@ -23,7 +24,9 @@ from ..config import (
     PROMPT_SUMMARY_TRUNCATE_LENGTH,
     UNIQUE_ID_LENGTH,
     PROGRESS_LOG_INTERVAL_SECONDS,
-    GITHUB_ENABLED
+    GITHUB_ENABLED,
+    MAX_PROMPT_LENGTH,
+    MODEL_NAME_PATTERN
 )
 from ..utils.logging import logger
 from ..utils import (
@@ -32,6 +35,7 @@ from ..utils import (
     get_folder_tree,
     count_files_excluding_ignored,
     truncate_output,
+    format_error_message,
     github_manager
 )
 from ..utils.async_buffer import AsyncOutputBuffer
@@ -353,7 +357,7 @@ async def _send_summary(
         status = "⏰ **TIMED OUT** - Process was killed after 30 minutes"
         status_text = "TIMED OUT"
     elif error_occurred:
-        status = f"❌ **ERROR**\n```\n{error_message}\n```"
+        status = format_error_message("ERROR", error_message)
         status_text = "ERROR"
     elif process and process.returncode == 0:
         status = "✅ **COMPLETED SUCCESSFULLY**"
@@ -399,7 +403,7 @@ async def _send_summary(
             pass
 
 
-def setup_createproject_command(bot):
+def setup_createproject_command(bot) -> Callable:
     """Set up the /createproject command on the bot."""
     
     @bot.tree.command(name="createproject", description="Create a new project using Copilot CLI")
@@ -411,8 +415,32 @@ def setup_createproject_command(bot):
         interaction: discord.Interaction,
         prompt: str,
         model: Optional[str] = None
-    ):
+    ) -> None:
         """Handle the /createproject command."""
+        # Validate prompt
+        prompt = prompt.strip()
+        if not prompt:
+            await interaction.response.send_message(
+                format_error_message("Invalid Input", "Prompt cannot be empty.", include_traceback=False),
+                ephemeral=True
+            )
+            return
+        
+        if len(prompt) > MAX_PROMPT_LENGTH:
+            await interaction.response.send_message(
+                format_error_message("Invalid Input", f"Prompt is too long (max {MAX_PROMPT_LENGTH:,} characters).", include_traceback=False),
+                ephemeral=True
+            )
+            return
+        
+        # Validate model if provided
+        if model and not re.match(MODEL_NAME_PATTERN, model):
+            await interaction.response.send_message(
+                format_error_message("Invalid Input", "Invalid model name format. Use only letters, numbers, hyphens, underscores, and dots.", include_traceback=False),
+                ephemeral=True
+            )
+            return
+        
         await interaction.response.defer()
         
         # Log GitHub configuration status
@@ -437,7 +465,7 @@ def setup_createproject_command(bot):
             project_path, folder_name = await _create_project_directory(username, session_log)
         except Exception as e:
             session_log.error(f"Failed to create project directory: {e}")
-            await interaction.followup.send(f"❌ Failed to create project directory:\n```\n{traceback.format_exc()}\n```")
+            await interaction.followup.send(format_error_message("Failed to create project directory", traceback.format_exc()))
             return
         
         # Send initial messages
@@ -445,7 +473,7 @@ def setup_createproject_command(bot):
             file_tree_msg, output_msg = await _send_initial_messages(interaction, project_path, model)
         except Exception as e:
             session_log.error(f"Failed to send Discord messages: {e}")
-            await interaction.followup.send(f"❌ Failed to send messages:\n```\n{traceback.format_exc()}\n```")
+            await interaction.followup.send(format_error_message("Failed to send messages", traceback.format_exc()))
             return
         
         # State tracking with thread-safe buffer

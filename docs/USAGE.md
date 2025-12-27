@@ -39,8 +39,13 @@
 Creates a new project using Copilot CLI.
 
 **Parameters:**
-- `prompt` (required): The prompt describing what project to create
+- `prompt` (required): The prompt describing what project to create (max 10,000 characters)
 - `model` (optional): The AI model to use (e.g., `gpt-4`, `claude-3-opus`)
+
+**Input Validation:**
+- Empty prompts are rejected
+- Prompts exceeding 10,000 characters are rejected
+- Model names must contain only letters, numbers, hyphens, underscores, and dots
 
 **Example:**
 ```

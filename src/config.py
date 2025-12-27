@@ -70,3 +70,7 @@ UNIQUE_ID_LENGTH = 8
 
 # Progress logging interval in seconds
 PROGRESS_LOG_INTERVAL_SECONDS = 30
+
+# Input validation
+MAX_PROMPT_LENGTH = 10000
+MODEL_NAME_PATTERN = r'^[a-zA-Z0-9\-_.]+$'

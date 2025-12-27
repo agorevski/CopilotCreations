@@ -91,6 +91,7 @@ Centralized configuration with explicit initialization:
 - Prompt truncation lengths (`PROMPT_LOG_TRUNCATE_LENGTH`, `PROMPT_SUMMARY_TRUNCATE_LENGTH`)
 - Unique ID generation settings (`UNIQUE_ID_LENGTH`)
 - Progress logging interval (`PROGRESS_LOG_INTERVAL_SECONDS`)
+- Input validation (`MAX_PROMPT_LENGTH`, `MODEL_NAME_PATTERN`)
 
 ### Commands (`src/commands/`)
 
@@ -105,6 +106,11 @@ The main command is organized into modular helper functions:
 - `_update_final_messages()` - Updates Discord messages with final state
 - `_handle_github_integration()` - Creates GitHub repo and pushes code
 - `_send_summary()` - Sends final summary with log attachment
+
+**Input Validation:**
+- Empty prompts are rejected
+- Prompts exceeding `MAX_PROMPT_LENGTH` (10,000 chars) are rejected
+- Model names are validated against `MODEL_NAME_PATTERN`
 
 **Shared Utilities:**
 - `update_message_with_content()` - Generic message updater (DRY pattern)
@@ -121,7 +127,8 @@ The main command is organized into modular helper functions:
   - `append_sync()` / `get_content_sync()` - Sync fallbacks
 
 #### `logging.py`
-- `setup_logging()`: Configures the application logger
+- `get_logger()`: Returns the singleton application logger (preferred)
+- `setup_logging()`: Configures and returns the logger (deprecated, kept for backward compatibility)
 - `SessionLogCollector`: Collects logs for a specific command session
 
 #### `folder_utils.py`
@@ -134,6 +141,7 @@ The main command is organized into modular helper functions:
 
 #### `text_utils.py`
 - `truncate_output()`: Truncates text to fit Discord message limits
+- `format_error_message()`: Formats error messages consistently for Discord
 
 #### `github.py`
 - `GitHubManager`: Class that manages GitHub repository operations
