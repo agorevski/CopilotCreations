@@ -15,6 +15,7 @@ from .text_utils import truncate_output, format_error_message
 from .github import GitHubManager, github_manager
 from .async_buffer import AsyncOutputBuffer
 from .naming import RepositoryNamingGenerator, naming_generator
+from .process_registry import ProcessRegistry, get_process_registry
 
 __all__ = [
     "setup_logging",
@@ -32,5 +33,7 @@ __all__ = [
     "github_manager",
     "AsyncOutputBuffer",
     "RepositoryNamingGenerator",
-    "naming_generator"
+    "naming_generator",
+    "ProcessRegistry",
+    "get_process_registry"
 ]

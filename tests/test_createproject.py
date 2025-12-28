@@ -492,12 +492,22 @@ class TestRunCopilotProcess:
                 mock_process.kill = MagicMock()
                 mock_exec.return_value = mock_process
                 
-                with patch('src.commands.createproject.TIMEOUT_SECONDS', 1):
-                    with patch('src.commands.createproject.PROGRESS_LOG_INTERVAL_SECONDS', 100):
-                        timed_out, error_occurred, error_message, process = await _run_copilot_process(
-                            project_path, "test prompt", None, session_log,
-                            output_buffer, is_running, error_event
-                        )
+                with patch('src.commands.createproject.get_process_registry') as mock_get_registry:
+                    mock_registry = MagicMock()
+                    mock_registry.register = AsyncMock()
+                    mock_registry.unregister = AsyncMock()
+                    mock_get_registry.return_value = mock_registry
+                    
+                    with patch('src.commands.createproject.TIMEOUT_SECONDS', 1):
+                        with patch('src.commands.createproject.PROGRESS_LOG_INTERVAL_SECONDS', 100):
+                            timed_out, error_occurred, error_message, process = await _run_copilot_process(
+                                project_path, "test prompt", None, session_log,
+                                output_buffer, is_running, error_event
+                            )
+                    
+                    # Verify process was registered and unregistered
+                    mock_registry.register.assert_called_once_with(mock_process)
+                    mock_registry.unregister.assert_called_once_with(mock_process)
                 
                 assert timed_out is False
                 assert error_occurred is False
@@ -523,12 +533,18 @@ class TestRunCopilotProcess:
                 mock_process.pid = 12345
                 mock_exec.return_value = mock_process
                 
-                with patch('src.commands.createproject.TIMEOUT_SECONDS', 1):
-                    with patch('src.commands.createproject.PROGRESS_LOG_INTERVAL_SECONDS', 100):
-                        await _run_copilot_process(
-                            project_path, "test prompt", "gpt-4", session_log,
-                            output_buffer, is_running, error_event
-                        )
+                with patch('src.commands.createproject.get_process_registry') as mock_get_registry:
+                    mock_registry = MagicMock()
+                    mock_registry.register = AsyncMock()
+                    mock_registry.unregister = AsyncMock()
+                    mock_get_registry.return_value = mock_registry
+                    
+                    with patch('src.commands.createproject.TIMEOUT_SECONDS', 1):
+                        with patch('src.commands.createproject.PROGRESS_LOG_INTERVAL_SECONDS', 100):
+                            await _run_copilot_process(
+                                project_path, "test prompt", "gpt-4", session_log,
+                                output_buffer, is_running, error_event
+                            )
                 
                 # Check that model was included in command
                 call_args = mock_exec.call_args[0]
@@ -556,12 +572,22 @@ class TestRunCopilotProcess:
                 mock_process.kill = MagicMock()
                 mock_exec.return_value = mock_process
                 
-                with patch('src.commands.createproject.TIMEOUT_SECONDS', 0.01):
-                    with patch('src.commands.createproject.PROGRESS_LOG_INTERVAL_SECONDS', 100):
-                        timed_out, error_occurred, error_message, process = await _run_copilot_process(
-                            project_path, "test prompt", None, session_log,
-                            output_buffer, is_running, error_event
-                        )
+                with patch('src.commands.createproject.get_process_registry') as mock_get_registry:
+                    mock_registry = MagicMock()
+                    mock_registry.register = AsyncMock()
+                    mock_registry.unregister = AsyncMock()
+                    mock_get_registry.return_value = mock_registry
+                    
+                    with patch('src.commands.createproject.TIMEOUT_SECONDS', 0.01):
+                        with patch('src.commands.createproject.PROGRESS_LOG_INTERVAL_SECONDS', 100):
+                            timed_out, error_occurred, error_message, process = await _run_copilot_process(
+                                project_path, "test prompt", None, session_log,
+                                output_buffer, is_running, error_event
+                            )
+                    
+                    # Verify process was registered and unregistered even on timeout
+                    mock_registry.register.assert_called_once()
+                    mock_registry.unregister.assert_called_once()
                 
                 assert timed_out is True
                 mock_process.kill.assert_called_once()

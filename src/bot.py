@@ -12,6 +12,7 @@ from discord import app_commands
 
 from .config import DISCORD_BOT_TOKEN, PROJECTS_DIR, GITHUB_ENABLED, GITHUB_TOKEN, GITHUB_USERNAME, MAX_PARALLEL_REQUESTS
 from .utils.logging import logger
+from .utils.process_registry import get_process_registry
 
 
 class CopilotBot(discord.Client):
@@ -97,6 +98,9 @@ def setup_signal_handlers(bot: CopilotBot) -> None:
     """Set up signal handlers for graceful shutdown."""
     def signal_handler(sig: int, frame) -> None:
         logger.info(f"Received signal {sig}, initiating graceful shutdown...")
+        # Kill all tracked subprocesses synchronously
+        process_registry = get_process_registry()
+        process_registry.kill_all_sync()
         # Schedule cleanup in the event loop
         loop = asyncio.get_event_loop()
         if loop.is_running():

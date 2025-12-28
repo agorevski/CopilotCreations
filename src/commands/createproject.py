@@ -46,7 +46,8 @@ from ..utils import (
     truncate_output,
     format_error_message,
     github_manager,
-    naming_generator
+    naming_generator,
+    get_process_registry
 )
 from ..utils.async_buffer import AsyncOutputBuffer
 
@@ -256,9 +257,6 @@ async def _create_project_directory(
     Raises:
         Exception: If directory creation fails.
     """
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    unique_id = str(uuid.uuid4())[:UNIQUE_ID_LENGTH]
-    
     # Try to generate a creative name using Azure OpenAI
     creative_name = None
     if naming_generator.is_configured() and prompt:
@@ -266,10 +264,12 @@ async def _create_project_directory(
         if creative_name:
             session_log.info(f"Generated creative repository name: {creative_name}")
     
-    # Use creative name with timestamp suffix, or fallback to standard format
+    # Use creative name as-is, or fallback to standard format with timestamp/uuid
     if creative_name:
-        folder_name = f"{creative_name}_{timestamp}_{unique_id}"
+        folder_name = creative_name
     else:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        unique_id = str(uuid.uuid4())[:UNIQUE_ID_LENGTH]
         folder_name = f"{username}_{timestamp}_{unique_id}"
         if naming_generator.is_configured():
             session_log.info("Falling back to standard naming format")
@@ -359,6 +359,10 @@ async def _run_copilot_process(
         )
         session_log.info(f"Copilot process started (PID: {process.pid})")
         
+        # Register process for cleanup on shutdown
+        process_registry = get_process_registry()
+        await process_registry.register(process)
+        
         # Read output with timeout
         read_task = asyncio.create_task(read_stream(process.stdout, output_buffer))
         
@@ -382,6 +386,9 @@ async def _run_copilot_process(
             await process.wait()
             await output_buffer.append(f"\n\n⏰ TIMEOUT: Process killed after {TIMEOUT_MINUTES} minutes.\n")
             session_log.warning(f"Process timed out after {TIMEOUT_MINUTES} minutes")
+        finally:
+            # Unregister process after completion or timeout
+            await process_registry.unregister(process)
         
         progress_task.cancel()
         try:

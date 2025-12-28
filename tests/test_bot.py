@@ -284,6 +284,64 @@ class TestGracefulShutdown:
         handler = signal.getsignal(signal.SIGINT)
         assert handler is not signal.SIG_DFL
     
+    def test_signal_handler_kills_processes_and_exits(self):
+        """Test that signal handler kills all processes and exits."""
+        from src.bot import setup_signal_handlers, create_bot
+        import signal
+        
+        bot = create_bot()
+        setup_signal_handlers(bot)
+        
+        # Get the registered signal handler
+        handler = signal.getsignal(signal.SIGINT)
+        
+        # Mock the process registry and sys.exit
+        with patch('src.bot.get_process_registry') as mock_get_registry:
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            
+            with patch('src.bot.asyncio.get_event_loop') as mock_get_loop:
+                mock_loop = MagicMock()
+                mock_loop.is_running.return_value = False
+                mock_get_loop.return_value = mock_loop
+                
+                with patch('src.bot.sys.exit') as mock_exit:
+                    # Call the signal handler directly
+                    handler(signal.SIGINT, None)
+                    
+                    # Verify process registry was called
+                    mock_get_registry.assert_called_once()
+                    mock_registry.kill_all_sync.assert_called_once()
+                    mock_exit.assert_called_once_with(0)
+    
+    def test_signal_handler_schedules_cleanup_when_loop_running(self):
+        """Test that signal handler schedules cleanup when event loop is running."""
+        from src.bot import setup_signal_handlers, create_bot
+        import signal
+        
+        bot = create_bot()
+        bot.cleanup = AsyncMock()
+        setup_signal_handlers(bot)
+        
+        handler = signal.getsignal(signal.SIGINT)
+        
+        with patch('src.bot.get_process_registry') as mock_get_registry:
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            
+            with patch('src.bot.asyncio.get_event_loop') as mock_get_loop:
+                mock_loop = MagicMock()
+                mock_loop.is_running.return_value = True
+                mock_get_loop.return_value = mock_loop
+                
+                with patch('src.bot.asyncio.create_task') as mock_create_task:
+                    with patch('src.bot.sys.exit') as mock_exit:
+                        handler(signal.SIGINT, None)
+                        
+                        # Verify cleanup was scheduled
+                        mock_create_task.assert_called_once()
+                        mock_exit.assert_called_once_with(0)
+    
     @pytest.mark.asyncio
     async def test_bot_cleanup(self):
         """Test that bot cleanup method can be called."""
