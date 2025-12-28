@@ -314,4 +314,138 @@ class TestGetFolderTree:
             
             # Should contain tree connectors (shortened format)
             assert "├ " in result or "└ " in result
+    
+    def test_inline_empty_folder(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            (tmppath / "workflows").mkdir()
+            
+            result = get_folder_tree(tmppath)
+            
+            # Empty folders should be omitted entirely
+            assert "workflows" not in result
+    
+    def test_inline_single_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            workflows = tmppath / "workflows"
+            workflows.mkdir()
+            (workflows / "ci.yaml").touch()
+            
+            result = get_folder_tree(tmppath)
+            
+            # Single file should be inlined with parent
+            assert "workflows/ci.yaml" in result
+    
+    def test_inline_nested_single_path(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            github = tmppath / ".github"
+            github.mkdir()
+            workflows = github / "workflows"
+            workflows.mkdir()
+            (workflows / "ci.yaml").touch()
+            
+            result = get_folder_tree(tmppath)
+            
+            # Nested single-child paths should be fully inlined
+            assert ".github/workflows/ci.yaml" in result
+    
+    def test_inline_nested_empty_folder(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            github = tmppath / ".github"
+            github.mkdir()
+            workflows = github / "workflows"
+            workflows.mkdir()
+            
+            result = get_folder_tree(tmppath)
+            
+            # Nested empty folders should be omitted entirely
+            assert ".github" not in result
+            assert "workflows" not in result
+    
+    def test_multiple_files_comma_separated(self):
+        """Test that multiple files in same directory are comma-separated on one line."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            src = tmppath / "src"
+            src.mkdir()
+            for name in ["__init__.py", "cli.py", "models.py"]:
+                (src / name).touch()
+            
+            result = get_folder_tree(tmppath)
+            
+            # Files should be comma-separated on one line
+            assert "__init__.py, cli.py, models.py" in result
+    
+    def test_files_truncated_after_max(self):
+        """Test that files beyond max_files_inline show (+N files) count."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            src = tmppath / "src"
+            src.mkdir()
+            # Create 15 files
+            for i in range(15):
+                (src / f"file{i:02d}.py").touch()
+            
+            result = get_folder_tree(tmppath, max_files_inline=10)
+            
+            # Should show first 10 files and (+5 files)
+            assert "(+5 files)" in result
+            assert "file00.py" in result
+            assert "file09.py" in result
+    
+    def test_files_at_exact_max_no_truncation(self):
+        """Test that exactly max_files_inline files shows all without (+N files)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            src = tmppath / "src"
+            src.mkdir()
+            # Create exactly 10 files
+            for i in range(10):
+                (src / f"file{i:02d}.py").touch()
+            
+            result = get_folder_tree(tmppath, max_files_inline=10)
+            
+            # Should show all 10 files without truncation message
+            assert "(+" not in result
+            assert "file00.py" in result
+            assert "file09.py" in result
+    
+    def test_custom_max_files_inline(self):
+        """Test custom max_files_inline parameter."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            src = tmppath / "src"
+            src.mkdir()
+            # Create 8 files
+            for i in range(8):
+                (src / f"file{i}.py").touch()
+            
+            result = get_folder_tree(tmppath, max_files_inline=5)
+            
+            # Should show first 5 and (+3 files)
+            assert "(+3 files)" in result
+    
+    def test_dirs_and_files_mixed(self):
+        """Test that directories appear before grouped files."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            (tmppath / "src").mkdir()
+            (tmppath / "tests").mkdir()
+            (tmppath / "README.md").touch()
+            (tmppath / "setup.py").touch()
+            
+            result = get_folder_tree(tmppath)
+            
+            # Dirs should appear before files
+            src_pos = result.find("src")
+            tests_pos = result.find("tests")
+            readme_pos = result.find("README.md")
+            
+            assert src_pos < readme_pos
+            assert tests_pos < readme_pos
+            # Files should be on one line
+            assert "README.md, setup.py" in result
 

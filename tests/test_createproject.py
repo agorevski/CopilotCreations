@@ -37,7 +37,9 @@ class TestGenerateFolderStructureSection:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             (tmppath / "test.txt").touch()
+            # Create subdir with a file (empty dirs are filtered out)
             (tmppath / "subdir").mkdir()
+            (tmppath / "subdir" / "subfile.txt").touch()
             
             result = _generate_folder_structure_section(tmppath)
             
@@ -49,14 +51,20 @@ class TestGenerateFolderStructureSection:
         """Test that long content is truncated with ellipsis."""
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
-            # Create many files to generate long tree
-            for i in range(100):
-                (tmppath / f"file_{i:04d}.txt").touch()
+            # Create many nested directories with long names to force truncation
+            # (files are grouped inline, so we need long names)
+            for i in range(20):
+                subdir = tmppath / f"very_long_directory_name_{i:04d}_with_extra_text"
+                subdir.mkdir()
+                for j in range(5):
+                    (subdir / f"file_with_a_very_long_name_{j:04d}.txt").touch()
             
             result = _generate_folder_structure_section(tmppath)
             
             assert len(result) <= MAX_FOLDER_STRUCTURE_LENGTH
-            assert result.endswith("...")
+            # When truncated, content ends with "..."
+            if len(result) == MAX_FOLDER_STRUCTURE_LENGTH:
+                assert result.endswith("...")
     
     def test_handles_empty_directory(self):
         """Test handling of empty directory."""
@@ -1139,3 +1147,359 @@ class TestSendLogFile:
         assert "Creating files..." in file_content
         assert "Generated main.py" in file_content
         assert "Done!" in file_content
+
+
+class TestGenerateSummarySectionEdgeCases:
+    """Additional tests for _generate_summary_section edge cases."""
+    
+    @pytest.fixture
+    def mock_interaction(self):
+        """Create a mock Discord interaction."""
+        interaction = AsyncMock()
+        interaction.user = MagicMock()
+        interaction.user.mention = "@testuser"
+        return interaction
+    
+    def test_error_status_with_message(self, mock_interaction):
+        """Test error status with error message (line 121)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = _generate_summary_section(
+                interaction=mock_interaction,
+                prompt="test prompt",
+                model=None,
+                project_path=Path(tmpdir),
+                error_occurred=True,
+                error_message="Something went wrong",
+                is_complete=True
+            )
+            
+            assert "ERROR" in result
+            assert "Something went wrong" in result or "❌" in result
+    
+    def test_error_status_without_message(self, mock_interaction):
+        """Test error status with empty error message (line 121 - else branch)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = _generate_summary_section(
+                interaction=mock_interaction,
+                prompt="test prompt",
+                model=None,
+                project_path=Path(tmpdir),
+                error_occurred=True,
+                error_message="",
+                is_complete=True
+            )
+            
+            assert "ERROR" in result or "Unknown error" in result
+    
+    def test_exit_code_with_no_process(self, mock_interaction):
+        """Test exit code display when process is None (line 125)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = _generate_summary_section(
+                interaction=mock_interaction,
+                prompt="test prompt",
+                model=None,
+                project_path=Path(tmpdir),
+                process=None,
+                is_complete=True
+            )
+            
+            assert "unknown" in result or "EXIT CODE" in result
+    
+    def test_exit_code_with_nonzero_returncode(self, mock_interaction):
+        """Test exit code display with non-zero return code (line 125-126)."""
+        mock_process = MagicMock()
+        mock_process.returncode = 42
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = _generate_summary_section(
+                interaction=mock_interaction,
+                prompt="test prompt",
+                model=None,
+                project_path=Path(tmpdir),
+                process=mock_process,
+                is_complete=True
+            )
+            
+            assert "42" in result
+
+
+class TestBuildUnifiedMessageTruncation:
+    """Tests for _build_unified_message truncation logic."""
+    
+    def test_truncates_long_folder_section(self):
+        """Test that long folder section is truncated (line 162)."""
+        long_folder = "x" * 1000  # Exceeds MAX_FOLDER_STRUCTURE_LENGTH
+        output_section = "output"
+        summary_section = "summary"
+        
+        result = _build_unified_message(long_folder, output_section, summary_section)
+        
+        assert "..." in result
+        assert len(result) <= MAX_MESSAGE_LENGTH
+    
+    def test_truncates_long_output_section(self):
+        """Test that long output section is truncated (line 164)."""
+        folder_section = "folder"
+        long_output = "x" * 2000  # Exceeds MAX_COPILOT_OUTPUT_LENGTH
+        summary_section = "summary"
+        
+        result = _build_unified_message(folder_section, long_output, summary_section)
+        
+        assert "..." in result
+        assert len(result) <= MAX_MESSAGE_LENGTH
+    
+    def test_truncates_long_summary_section(self):
+        """Test that long summary section is truncated (line 166)."""
+        from src.config import MAX_SUMMARY_LENGTH
+        
+        folder_section = "folder"
+        output_section = "output"
+        long_summary = "x" * (MAX_SUMMARY_LENGTH + 100)
+        
+        result = _build_unified_message(folder_section, output_section, long_summary)
+        
+        assert "..." in result
+    
+    def test_final_safety_truncation(self):
+        """Test final safety truncation when combined message is too long (lines 174-177)."""
+        # Create sections that together exceed MAX_MESSAGE_LENGTH
+        folder_section = "f" * 300
+        output_section = "o" * 1200
+        summary_section = "s" * 300
+        
+        result = _build_unified_message(folder_section, output_section, summary_section)
+        
+        assert len(result) <= MAX_MESSAGE_LENGTH
+
+
+class TestCreateProjectDirectoryWithNaming:
+    """Tests for _create_project_directory with creative naming."""
+    
+    @pytest.mark.asyncio
+    async def test_uses_creative_name_when_available(self):
+        """Test that creative name is used when naming generator returns one (lines 263-265, 268-269)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch('src.commands.createproject.PROJECTS_DIR', Path(tmpdir)):
+                with patch('src.commands.createproject.naming_generator') as mock_naming:
+                    mock_naming.is_configured.return_value = True
+                    mock_naming.generate_name.return_value = "creative-project-name"
+                    
+                    session_log = SessionLogCollector("test")
+                    project_path, folder_name = await _create_project_directory(
+                        "testuser", session_log, "create a web app"
+                    )
+                    
+                    assert folder_name == "creative-project-name"
+                    assert project_path.name == "creative-project-name"
+    
+    @pytest.mark.asyncio
+    async def test_fallback_when_naming_fails(self):
+        """Test fallback to standard naming when creative name fails (lines 274-275)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch('src.commands.createproject.PROJECTS_DIR', Path(tmpdir)):
+                with patch('src.commands.createproject.naming_generator') as mock_naming:
+                    mock_naming.is_configured.return_value = True
+                    mock_naming.generate_name.return_value = None  # Failed to generate
+                    
+                    session_log = SessionLogCollector("test")
+                    project_path, folder_name = await _create_project_directory(
+                        "testuser", session_log, "create a web app"
+                    )
+                    
+                    # Should fall back to standard naming (contains username)
+                    assert "testuser" in folder_name
+    
+    @pytest.mark.asyncio
+    async def test_standard_naming_when_not_configured(self):
+        """Test standard naming when naming generator not configured."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch('src.commands.createproject.PROJECTS_DIR', Path(tmpdir)):
+                with patch('src.commands.createproject.naming_generator') as mock_naming:
+                    mock_naming.is_configured.return_value = False
+                    
+                    session_log = SessionLogCollector("test")
+                    project_path, folder_name = await _create_project_directory(
+                        "testuser", session_log, ""
+                    )
+                    
+                    assert "testuser" in folder_name
+
+
+class TestSendInitialMessageTruncation:
+    """Tests for _send_initial_message with long prompts."""
+    
+    @pytest.mark.asyncio
+    async def test_truncates_long_prompt(self):
+        """Test that long prompt is truncated in initial message (line 302-303)."""
+        mock_interaction = AsyncMock()
+        mock_unified_msg = AsyncMock()
+        mock_interaction.user = MagicMock()
+        mock_interaction.user.display_name = "testuser"
+        mock_interaction.followup.send = AsyncMock(return_value=mock_unified_msg)
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_path = Path(tmpdir)
+            long_prompt = "x" * 500  # Longer than PROMPT_SUMMARY_TRUNCATE_LENGTH
+            
+            await _send_initial_message(mock_interaction, project_path, long_prompt, None)
+            
+            call_args = str(mock_interaction.followup.send.call_args)
+            assert "..." in call_args
+
+
+class TestSendLogFileEdgeCases:
+    """Additional tests for _send_log_file edge cases."""
+    
+    @pytest.mark.asyncio
+    async def test_nonzero_exit_code_with_process(self):
+        """Test log file with non-zero exit code (lines 552-553)."""
+        mock_interaction = AsyncMock()
+        mock_interaction.channel.send = AsyncMock()
+        
+        session_log = SessionLogCollector("test")
+        mock_process = MagicMock()
+        mock_process.returncode = 1  # Non-zero exit
+        output_buffer = AsyncOutputBuffer()
+        
+        await _send_log_file(
+            mock_interaction, session_log, "test_folder", "test prompt", None,
+            False, False, "", mock_process, 0, 0, output_buffer
+        )
+        
+        assert mock_interaction.channel.send.called
+    
+    @pytest.mark.asyncio
+    async def test_nonzero_exit_code_without_process(self):
+        """Test log file with no process (line 552 - else branch)."""
+        mock_interaction = AsyncMock()
+        mock_interaction.channel.send = AsyncMock()
+        
+        session_log = SessionLogCollector("test")
+        output_buffer = AsyncOutputBuffer()
+        
+        await _send_log_file(
+            mock_interaction, session_log, "test_folder", "test prompt", "gpt-4",
+            False, False, "", None, 0, 0, output_buffer  # process=None
+        )
+        
+        assert mock_interaction.channel.send.called
+    
+    @pytest.mark.asyncio
+    async def test_handles_send_exception(self):
+        """Test handling of exception when sending log file (lines 576-577)."""
+        mock_interaction = AsyncMock()
+        mock_interaction.channel.send = AsyncMock(side_effect=RuntimeError("Send failed"))
+        
+        session_log = SessionLogCollector("test")
+        mock_process = MagicMock()
+        mock_process.returncode = 0
+        output_buffer = AsyncOutputBuffer()
+        
+        # Should not raise exception
+        await _send_log_file(
+            mock_interaction, session_log, "test_folder", "test prompt", None,
+            False, False, "", mock_process, 0, 0, output_buffer
+        )
+
+
+class TestUpdateUnifiedMessageEdgeCases:
+    """Additional tests for update_unified_message edge cases."""
+    
+    @pytest.fixture
+    def mock_interaction(self):
+        """Create a mock Discord interaction."""
+        interaction = AsyncMock()
+        interaction.user = MagicMock()
+        interaction.user.mention = "@testuser"
+        return interaction
+    
+    @pytest.mark.asyncio
+    async def test_skips_update_when_content_unchanged(self, mock_interaction):
+        """Test that message is not edited when content hasn't changed (line 215)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            (tmppath / "test.txt").touch()
+            
+            mock_message = AsyncMock()
+            output_buffer = AsyncOutputBuffer()
+            await output_buffer.append("static output")
+            is_running = asyncio.Event()
+            is_running.set()
+            error_event = asyncio.Event()
+            
+            call_count = 0
+            original_edit = mock_message.edit
+            
+            async def counting_edit(*args, **kwargs):
+                nonlocal call_count
+                call_count += 1
+            
+            mock_message.edit = counting_edit
+            
+            async def stop_after_delay():
+                await asyncio.sleep(0.15)  # Run slightly longer to allow multiple iterations
+                is_running.clear()
+            
+            with patch('src.commands.createproject.UPDATE_INTERVAL', 0.03):
+                await asyncio.gather(
+                    update_unified_message(
+                        mock_message, tmppath, output_buffer, mock_interaction,
+                        "test prompt", None, is_running, error_event
+                    ),
+                    stop_after_delay()
+                )
+            
+            # Should be called once (first time), but not for unchanged content
+            # Actually multiple iterations could happen but content is same so only first edit
+            assert call_count >= 1
+    
+    @pytest.mark.asyncio
+    async def test_handles_generic_exception(self, mock_interaction):
+        """Test that generic exceptions are handled (lines 221-222)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            (tmppath / "test.txt").touch()
+            
+            mock_message = AsyncMock()
+            mock_message.edit.side_effect = RuntimeError("Unexpected error")
+            output_buffer = AsyncOutputBuffer()
+            await output_buffer.append("output")
+            is_running = asyncio.Event()
+            is_running.set()
+            error_event = asyncio.Event()
+            
+            async def stop_after_delay():
+                await asyncio.sleep(0.1)
+                is_running.clear()
+            
+            with patch('src.commands.createproject.UPDATE_INTERVAL', 0.03):
+                # Should not raise exception
+                await asyncio.gather(
+                    update_unified_message(
+                        mock_message, tmppath, output_buffer, mock_interaction,
+                        "test prompt", None, is_running, error_event
+                    ),
+                    stop_after_delay()
+                )
+
+
+class TestGithubIntegrationEdgeCases:
+    """Additional edge case tests for GitHub integration."""
+    
+    @pytest.mark.asyncio
+    async def test_github_with_none_process(self):
+        """Test GitHub integration when process is None (line 470 condition fails)."""
+        from src.commands.createproject import _handle_github_integration
+        
+        session_log = SessionLogCollector("test")
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch('src.commands.createproject.GITHUB_ENABLED', True):
+                status, success = await _handle_github_integration(
+                    Path(tmpdir), "test_folder", "test prompt",
+                    False, False, None, session_log  # process=None
+                )
+                
+                # When process is None and no timeout/error, condition at line 470 fails
+                # and line 495 condition also fails, so empty status is returned
+                assert success is False

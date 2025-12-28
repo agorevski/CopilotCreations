@@ -103,14 +103,61 @@ def count_files_excluding_ignored(path: Path, ignore_patterns: Set[str] = None) 
     return file_count, dir_count
 
 
+def _get_inline_path(
+    path: Path,
+    max_depth: int,
+    current_depth: int,
+    ignore_patterns: Set[str]
+) -> Tuple[str, bool]:
+    """
+    Check if a directory should be inlined (empty or single child).
+    Returns (inline_suffix, is_terminal) where inline_suffix is the path to append
+    and is_terminal indicates if we've reached the end of the chain.
+    """
+    if current_depth > max_depth:
+        return "", False
+    
+    try:
+        all_items = sorted(path.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))
+        items = [item for item in all_items if not is_ignored(item.name, ignore_patterns)]
+    except PermissionError:
+        return "", True
+    
+    if len(items) == 0:
+        # Empty folder - signal to skip it
+        return "", True
+    
+    if len(items) == 1:
+        item = items[0]
+        if item.is_file():
+            return "/" + item.name, True
+        else:
+            # It's a directory - recurse to check if it can also be inlined
+            suffix, is_terminal = _get_inline_path(
+                item, max_depth, current_depth + 1, ignore_patterns
+            )
+            # If the nested path is terminal but has no suffix, it's an empty chain
+            if is_terminal and not suffix:
+                return "", True
+            return "/" + item.name + suffix, is_terminal
+    
+    return "", False
+
+
 def get_folder_tree(
     path: Path,
     prefix: str = "",
     max_depth: int = 4,
     current_depth: int = 0,
-    ignore_patterns: Set[str] = None
+    ignore_patterns: Set[str] = None,
+    max_files_inline: int = 10
 ) -> str:
-    """Generate a folder tree representation, respecting .folderignore patterns."""
+    """Generate a folder tree representation, respecting .folderignore patterns.
+    
+    Files in the same directory are grouped on a single line (comma-separated).
+    If there are more than max_files_inline files, shows first max_files_inline
+    and then "(+N files)" for the rest.
+    """
     if current_depth > max_depth:
         return prefix + "...\n"
     
@@ -127,17 +174,54 @@ def get_folder_tree(
         all_items = sorted(path.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))
         items = [item for item in all_items if not is_ignored(item.name, ignore_patterns)]
         
-        for i, item in enumerate(items):
-            is_last = i == len(items) - 1
+        # Separate directories and files
+        dirs = [item for item in items if item.is_dir()]
+        files = [item for item in items if item.is_file()]
+        
+        # Process directories
+        # First, filter out empty directories and collect non-empty ones with their inline info
+        non_empty_dirs = []
+        for item in dirs:
+            inline_suffix, is_terminal = _get_inline_path(
+                item, max_depth, current_depth + 1, ignore_patterns
+            )
+            # Skip empty directories (is_terminal=True with empty suffix)
+            if is_terminal and not inline_suffix:
+                continue
+            non_empty_dirs.append((item, inline_suffix, is_terminal))
+        
+        for i, (item, inline_suffix, is_terminal) in enumerate(non_empty_dirs):
+            is_last_dir = i == len(non_empty_dirs) - 1
+            is_last = is_last_dir and len(files) == 0
             connector = "└ " if is_last else "├ "
             
-            lines.append(f"{prefix}{connector}{item.name}")
-            
-            if item.is_dir():
+            if is_terminal:
+                lines.append(f"{prefix}{connector}{item.name}{inline_suffix}")
+            else:
+                lines.append(f"{prefix}{connector}{item.name}")
                 extension = "    " if is_last else "│   "
-                subtree = get_folder_tree(item, prefix + extension, max_depth, current_depth + 1, ignore_patterns)
+                subtree = get_folder_tree(
+                    item, prefix + extension, max_depth, current_depth + 1, 
+                    ignore_patterns, max_files_inline
+                )
                 if subtree:
                     lines.append(subtree.rstrip('\n'))
+        
+        # Process files - group them on one line
+        if files:
+            connector = "└ " if True else "├ "  # Files are always last
+            file_names = [f.name for f in files]
+            
+            if len(file_names) <= max_files_inline:
+                # Show all files on one line
+                files_str = ", ".join(file_names)
+            else:
+                # Show first max_files_inline files and count of remaining
+                shown_files = file_names[:max_files_inline]
+                remaining = len(file_names) - max_files_inline
+                files_str = ", ".join(shown_files) + f" (+{remaining} files)"
+            
+            lines.append(f"{prefix}{connector}{files_str}")
     except PermissionError:
         lines.append(f"{prefix}(permission denied)")
     
