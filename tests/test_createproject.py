@@ -22,7 +22,9 @@ from src.commands.createproject import (
     _send_initial_message,
     _run_copilot_process,
     _update_final_message,
-    _send_log_file
+    _send_log_file,
+    _handle_remove_readonly,
+    _cleanup_project_directory
 )
 from src.config import MAX_MESSAGE_LENGTH, PROJECTS_DIR, MAX_FOLDER_STRUCTURE_LENGTH, MAX_COPILOT_OUTPUT_LENGTH
 from src.utils.async_buffer import AsyncOutputBuffer
@@ -1503,3 +1505,233 @@ class TestGithubIntegrationEdgeCases:
                 # When process is None and no timeout/error, condition at line 470 fails
                 # and line 495 condition also fails, so empty status is returned
                 assert success is False
+
+
+class TestHandleRemoveReadonly:
+    """Tests for _handle_remove_readonly function."""
+    
+    def test_removes_readonly_on_permission_error(self):
+        """Test that readonly attribute is removed on PermissionError."""
+        import os
+        import stat
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a read-only file
+            test_file = Path(tmpdir) / "readonly_file.txt"
+            test_file.touch()
+            os.chmod(str(test_file), stat.S_IREAD)  # Make read-only
+            
+            # Verify it's read-only
+            assert not os.access(str(test_file), os.W_OK)
+            
+            # Create a mock function that will be called after chmod
+            remove_called = []
+            def mock_remove(path):
+                remove_called.append(path)
+            
+            # Call the handler with a PermissionError
+            exc_info = (PermissionError, PermissionError("Access denied"), None)
+            _handle_remove_readonly(mock_remove, str(test_file), exc_info)
+            
+            # Verify the file is now writable and remove was called
+            assert os.access(str(test_file), os.W_OK)
+            assert len(remove_called) == 1
+            assert remove_called[0] == str(test_file)
+    
+    def test_raises_non_permission_errors(self):
+        """Test that non-PermissionError exceptions are re-raised."""
+        def mock_func(path):
+            pass
+        
+        # Create exception info with a different error type
+        original_error = OSError("Disk full")
+        exc_info = (OSError, original_error, None)
+        
+        with pytest.raises(OSError) as exc:
+            _handle_remove_readonly(mock_func, "/some/path", exc_info)
+        
+        assert str(exc.value) == "Disk full"
+
+
+class TestCleanupWithReadonlyFiles:
+    """Tests for _cleanup_project_directory with read-only files."""
+    
+    def test_cleanup_with_readonly_git_objects(self):
+        """Test cleanup handles read-only .git files like on Windows."""
+        import os
+        import stat
+        
+        session_log = SessionLogCollector("test")
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_path = Path(tmpdir) / "test_project"
+            project_path.mkdir()
+            
+            # Simulate .git/objects structure with read-only files
+            git_objects = project_path / ".git" / "objects" / "01"
+            git_objects.mkdir(parents=True)
+            readonly_file = git_objects / "4f27ab66e69d3b5baaed92931e45d014dc67e6"
+            readonly_file.touch()
+            os.chmod(str(readonly_file), stat.S_IREAD)  # Make read-only
+            
+            # Also create a normal file
+            (project_path / "test.txt").touch()
+            
+            result = _cleanup_project_directory(project_path, session_log)
+            
+            assert result is True
+            assert not project_path.exists()
+    
+    def test_cleanup_with_nested_readonly_directories(self):
+        """Test cleanup handles nested read-only directories."""
+        import os
+        import stat
+        
+        session_log = SessionLogCollector("test")
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_path = Path(tmpdir) / "test_project"
+            project_path.mkdir()
+            
+            # Create nested structure with multiple read-only files
+            for i in range(3):
+                subdir = project_path / f"subdir_{i}"
+                subdir.mkdir()
+                for j in range(2):
+                    readonly_file = subdir / f"file_{j}.txt"
+                    readonly_file.touch()
+                    os.chmod(str(readonly_file), stat.S_IREAD)
+            
+            result = _cleanup_project_directory(project_path, session_log)
+            
+            assert result is True
+            assert not project_path.exists()
+
+
+class TestWebhookTokenExpiration:
+    """Tests for webhook token expiration handling (error code 50027)."""
+    
+    @pytest.fixture
+    def mock_interaction(self):
+        """Create a mock Discord interaction."""
+        interaction = AsyncMock()
+        interaction.user = MagicMock()
+        interaction.user.display_name = "testuser"
+        interaction.user.mention = "@testuser"
+        interaction.channel = AsyncMock()
+        return interaction
+    
+    @pytest.mark.asyncio
+    async def test_update_final_message_refetches_on_expired_token(self, mock_interaction):
+        """Test that _update_final_message re-fetches message when token expires."""
+        import discord
+        
+        mock_unified_msg = AsyncMock()
+        mock_unified_msg.id = 12345
+        
+        # First edit fails with expired token (error code 50027)
+        mock_response = MagicMock()
+        mock_response.status = 401
+        expired_error = discord.errors.HTTPException(mock_response, "Invalid Webhook Token")
+        expired_error.code = 50027
+        mock_unified_msg.edit.side_effect = expired_error
+        
+        # Fresh message succeeds
+        fresh_msg = AsyncMock()
+        mock_interaction.channel.fetch_message = AsyncMock(return_value=fresh_msg)
+        
+        output_buffer = AsyncOutputBuffer()
+        await output_buffer.append("Test output")
+        mock_process = MagicMock()
+        mock_process.returncode = 0
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            (tmppath / "test.txt").touch()
+            
+            await _update_final_message(
+                mock_unified_msg, tmppath, output_buffer, mock_interaction,
+                "test prompt", None, False, False, "", mock_process, ""
+            )
+            
+            # Verify fresh message was fetched and edited
+            mock_interaction.channel.fetch_message.assert_called_once_with(12345)
+            fresh_msg.edit.assert_called_once()
+    
+    @pytest.mark.asyncio
+    async def test_update_final_message_reraises_other_http_errors(self, mock_interaction):
+        """Test that _update_final_message handles non-50027 HTTP errors gracefully."""
+        import discord
+        
+        mock_unified_msg = AsyncMock()
+        mock_unified_msg.id = 12345
+        
+        # Different HTTP error (not 50027)
+        mock_response = MagicMock()
+        mock_response.status = 500
+        other_error = discord.errors.HTTPException(mock_response, "Internal Server Error")
+        other_error.code = 50000  # Different error code
+        mock_unified_msg.edit.side_effect = other_error
+        
+        output_buffer = AsyncOutputBuffer()
+        mock_process = MagicMock()
+        mock_process.returncode = 0
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            
+            # Should not raise, just log warning
+            await _update_final_message(
+                mock_unified_msg, tmppath, output_buffer, mock_interaction,
+                "test prompt", None, False, False, "", mock_process, ""
+            )
+            
+            # fetch_message should NOT be called for other errors
+            mock_interaction.channel.fetch_message.assert_not_called()
+    
+    @pytest.mark.asyncio
+    async def test_update_unified_message_refetches_on_expired_token(self, mock_interaction):
+        """Test that update_unified_message re-fetches message when token expires during updates."""
+        import discord
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            (tmppath / "test.txt").touch()
+            
+            mock_message = AsyncMock()
+            mock_message.id = 67890
+            
+            # First edit fails with expired token
+            mock_response = MagicMock()
+            mock_response.status = 401
+            expired_error = discord.errors.HTTPException(mock_response, "Invalid Webhook Token")
+            expired_error.code = 50027
+            mock_message.edit.side_effect = expired_error
+            
+            # Fresh message succeeds
+            fresh_msg = AsyncMock()
+            mock_interaction.channel.fetch_message = AsyncMock(return_value=fresh_msg)
+            
+            output_buffer = AsyncOutputBuffer()
+            await output_buffer.append("test output")
+            is_running = asyncio.Event()
+            is_running.set()
+            error_event = asyncio.Event()
+            
+            async def stop_after_delay():
+                await asyncio.sleep(0.1)
+                is_running.clear()
+            
+            with patch('src.commands.createproject.UPDATE_INTERVAL', 0.03):
+                await asyncio.gather(
+                    update_unified_message(
+                        mock_message, tmppath, output_buffer, mock_interaction,
+                        "test prompt", None, is_running, error_event
+                    ),
+                    stop_after_delay()
+                )
+            
+            # Verify fresh message was fetched
+            mock_interaction.channel.fetch_message.assert_called_with(67890)
+            # Verify fresh message was edited
+            assert fresh_msg.edit.called

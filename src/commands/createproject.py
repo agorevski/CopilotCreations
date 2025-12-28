@@ -4,8 +4,10 @@ Create project command for the Discord Copilot Bot.
 
 import asyncio
 import io
+import os
 import re
 import shutil
+import stat
 import traceback
 import uuid
 from datetime import datetime
@@ -194,6 +196,7 @@ async def update_unified_message(
     Polls every 3 seconds to update all three sections in a single message.
     """
     last_content = ""
+    current_message = message
     
     while is_running.is_set() and not error_event.is_set():
         try:
@@ -213,7 +216,18 @@ async def update_unified_message(
             
             # Only update if content has changed
             if content != last_content:
-                await message.edit(content=content)
+                try:
+                    await current_message.edit(content=content)
+                except discord.errors.HTTPException as e:
+                    # Discord interaction tokens expire after 15 minutes
+                    # Re-fetch the message using channel and ID to bypass the expired token
+                    if e.code == 50027:  # Invalid Webhook Token
+                        logger.info("Interaction token expired during updates, re-fetching message")
+                        channel = interaction.channel
+                        current_message = await channel.fetch_message(message.id)
+                        await current_message.edit(content=content)
+                    else:
+                        raise
                 last_content = content
                 
         except discord.errors.HTTPException as e:
@@ -447,7 +461,18 @@ async def _update_final_message(
         # Build final unified message (truncation handled inside)
         content = _build_unified_message(folder_section, output_section, summary_section)
         
-        await unified_msg.edit(content=content)
+        try:
+            await unified_msg.edit(content=content)
+        except discord.errors.HTTPException as e:
+            # Discord interaction tokens expire after 15 minutes
+            # Re-fetch the message using channel and ID to bypass the expired token
+            if e.code == 50027:  # Invalid Webhook Token
+                logger.info("Interaction token expired, re-fetching message to edit")
+                channel = interaction.channel
+                fresh_msg = await channel.fetch_message(unified_msg.id)
+                await fresh_msg.edit(content=content)
+            else:
+                raise
     except Exception as e:
         logger.warning(f"Error updating final unified message: {e}")
 
@@ -501,6 +526,22 @@ async def _handle_github_integration(
     return github_status, github_url is not None
 
 
+def _handle_remove_readonly(func, path, exc_info):
+    """Error handler for shutil.rmtree to handle read-only files on Windows.
+    
+    Git creates read-only files in .git/objects which cause Access Denied errors.
+    This handler removes the read-only attribute and retries the removal.
+    """
+    # Check if it's a permission error (Access Denied)
+    if isinstance(exc_info[1], PermissionError):
+        # Remove read-only attribute
+        os.chmod(path, stat.S_IWRITE)
+        # Retry the removal
+        func(path)
+    else:
+        raise exc_info[1]
+
+
 def _cleanup_project_directory(
     project_path: Path,
     session_log: SessionLogCollector
@@ -516,7 +557,8 @@ def _cleanup_project_directory(
     """
     try:
         if project_path.exists():
-            shutil.rmtree(project_path)
+            # Use onerror handler to deal with read-only files (e.g., .git/objects)
+            shutil.rmtree(project_path, onerror=_handle_remove_readonly)
             session_log.info(f"Cleaned up local project directory: {project_path}")
             logger.info(f"Cleaned up local project directory: {project_path}")
             return True
