@@ -32,3 +32,18 @@ createproject: |
   - Always include a .github/workflows/ directory with CI/CD pipeline configuration
   - Always include unit tests with good coverage
   - Follow best practices for the language/framework being used
+
+# Prompt for generating creative repository names using Azure OpenAI
+# The user's project description will be appended to this prompt
+repository_naming_prompt: |
+  Generate a single creative, fun, and playful repository name for a coding project.
+  The name should be:
+  - Memorable and quippy
+  - Related to what the project does
+  - All lowercase with hyphens between words (e.g., "pixel-wizard", "turbo-toaster")
+  - Between 2-4 words maximum
+  - Safe for work and professional
+  
+  Respond with ONLY the repository name, nothing else. No explanations, no quotes, just the name.
+  
+  Project description:

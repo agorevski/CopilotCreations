@@ -23,6 +23,12 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_USERNAME = os.getenv("GITHUB_USERNAME")
 GITHUB_REPO_PRIVATE = os.getenv("GITHUB_REPO_PRIVATE", "false").lower() == "true"
 
+# Azure OpenAI Configuration for creative repository naming
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AZURE_OPENAI_DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
+AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2025-01-01-preview")
+
 # Cleanup Configuration - delete local project folder after successful GitHub push
 CLEANUP_AFTER_PUSH = os.getenv("CLEANUP_AFTER_PUSH", "true").lower() == "true"
 

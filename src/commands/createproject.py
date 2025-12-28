@@ -45,7 +45,8 @@ from ..utils import (
     count_files_excluding_ignored,
     truncate_output,
     format_error_message,
-    github_manager
+    github_manager,
+    naming_generator
 )
 from ..utils.async_buffer import AsyncOutputBuffer
 
@@ -236,9 +237,18 @@ async def read_stream(stream, output_buffer: AsyncOutputBuffer) -> None:
 
 async def _create_project_directory(
     username: str,
-    session_log: SessionLogCollector
+    session_log: SessionLogCollector,
+    prompt: str = ""
 ) -> Tuple[Path, str]:
     """Create and return the project directory path.
+    
+    Uses Azure OpenAI to generate a creative repository name if configured,
+    otherwise falls back to the standard username_timestamp_uuid format.
+    
+    Args:
+        username: Sanitized username for fallback naming.
+        session_log: Session log collector.
+        prompt: Project description used to generate creative names.
     
     Returns:
         Tuple of (project_path, folder_name)
@@ -248,7 +258,22 @@ async def _create_project_directory(
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     unique_id = str(uuid.uuid4())[:UNIQUE_ID_LENGTH]
-    folder_name = f"{username}_{timestamp}_{unique_id}"
+    
+    # Try to generate a creative name using Azure OpenAI
+    creative_name = None
+    if naming_generator.is_configured() and prompt:
+        creative_name = naming_generator.generate_name(prompt)
+        if creative_name:
+            session_log.info(f"Generated creative repository name: {creative_name}")
+    
+    # Use creative name with timestamp suffix, or fallback to standard format
+    if creative_name:
+        folder_name = f"{creative_name}_{timestamp}_{unique_id}"
+    else:
+        folder_name = f"{username}_{timestamp}_{unique_id}"
+        if naming_generator.is_configured():
+            session_log.info("Falling back to standard naming format")
+    
     project_path = PROJECTS_DIR / folder_name
     
     project_path.mkdir(parents=True, exist_ok=True)
@@ -615,9 +640,9 @@ def setup_createproject_command(bot) -> Callable:
             else:
                 full_prompt = prompt
             
-            # Create project directory
+            # Create project directory (uses Azure OpenAI for creative naming if configured)
             try:
-                project_path, folder_name = await _create_project_directory(username, session_log)
+                project_path, folder_name = await _create_project_directory(username, session_log, prompt)
             except Exception as e:
                 session_log.error(f"Failed to create project directory: {e}")
                 await interaction.followup.send(format_error_message("Failed to create project directory", traceback.format_exc()))

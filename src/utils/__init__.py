@@ -14,6 +14,7 @@ from .folder_utils import (
 from .text_utils import truncate_output, format_error_message
 from .github import GitHubManager, github_manager
 from .async_buffer import AsyncOutputBuffer
+from .naming import RepositoryNamingGenerator, naming_generator
 
 __all__ = [
     "setup_logging",
@@ -29,5 +30,7 @@ __all__ = [
     "format_error_message",
     "GitHubManager",
     "github_manager",
-    "AsyncOutputBuffer"
+    "AsyncOutputBuffer",
+    "RepositoryNamingGenerator",
+    "naming_generator"
 ]
