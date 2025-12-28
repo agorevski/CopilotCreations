@@ -123,23 +123,21 @@ def get_folder_tree(
     
     lines = []
     try:
-        items = sorted(path.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))
+        # Filter out ignored items first
+        all_items = sorted(path.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))
+        items = [item for item in all_items if not is_ignored(item.name, ignore_patterns)]
+        
         for i, item in enumerate(items):
             is_last = i == len(items) - 1
-            connector = "└── " if is_last else "├── "
+            connector = "└ " if is_last else "├ "
             
-            if item.is_dir() and is_ignored(item.name, ignore_patterns):
-                # Show collapsed view with file count
-                file_count = count_files_recursive(item)
-                lines.append(f"{prefix}{connector}{item.name}/ ({file_count} files)")
-            else:
-                lines.append(f"{prefix}{connector}{item.name}")
-                
-                if item.is_dir():
-                    extension = "    " if is_last else "│   "
-                    subtree = get_folder_tree(item, prefix + extension, max_depth, current_depth + 1, ignore_patterns)
-                    if subtree:
-                        lines.append(subtree.rstrip('\n'))
+            lines.append(f"{prefix}{connector}{item.name}")
+            
+            if item.is_dir():
+                extension = "    " if is_last else "│   "
+                subtree = get_folder_tree(item, prefix + extension, max_depth, current_depth + 1, ignore_patterns)
+                if subtree:
+                    lines.append(subtree.rstrip('\n'))
     except PermissionError:
         lines.append(f"{prefix}(permission denied)")
     

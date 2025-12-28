@@ -23,6 +23,7 @@ from ..config import (
     MAX_MESSAGE_LENGTH,
     MAX_FOLDER_STRUCTURE_LENGTH,
     MAX_COPILOT_OUTPUT_LENGTH,
+    MAX_SUMMARY_LENGTH,
     COPILOT_DEFAULT_FLAGS,
     PROMPT_LOG_TRUNCATE_LENGTH,
     PROMPT_SUMMARY_TRUNCATE_LENGTH,
@@ -33,6 +34,7 @@ from ..config import (
     CLEANUP_AFTER_PUSH,
     MAX_PROMPT_LENGTH,
     MODEL_NAME_PATTERN,
+    MAX_PARALLEL_REQUESTS,
     get_prompt_template
 )
 from ..utils.logging import logger
@@ -134,7 +136,7 @@ Status: {status}
 Prompt: {truncated_prompt}
 Model: {model if model else 'default'}
 Files: {file_count} | Dirs: {dir_count}
-User: {interaction.user.display_name}{github_status}"""
+User: {interaction.user.mention}{github_status}"""
     
     return summary
 
@@ -150,8 +152,29 @@ def _build_unified_message(
     <Folder Structure>
     <Copilot Output>
     <Summary>
+    
+    Ensures each section is truncated to fit within Discord's 2000 char limit.
     """
-    return f"```\n{folder_section}\n```\n```\n{output_section}\n```\n{summary_section}"
+    # Truncate each section to its max length
+    if len(folder_section) > MAX_FOLDER_STRUCTURE_LENGTH:
+        folder_section = folder_section[:MAX_FOLDER_STRUCTURE_LENGTH - 3] + "..."
+    if len(output_section) > MAX_COPILOT_OUTPUT_LENGTH:
+        output_section = "..." + output_section[-(MAX_COPILOT_OUTPUT_LENGTH - 3):]
+    if len(summary_section) > MAX_SUMMARY_LENGTH:
+        summary_section = summary_section[:MAX_SUMMARY_LENGTH - 3] + "..."
+    
+    # Build message with code blocks
+    message = f"```\n{folder_section}\n```\n```\n{output_section}\n```\n{summary_section}"
+    
+    # Final safety truncation
+    if len(message) > MAX_MESSAGE_LENGTH:
+        # Preserve the summary by truncating output further
+        overflow = len(message) - MAX_MESSAGE_LENGTH + 10
+        if len(output_section) > overflow:
+            output_section = "..." + output_section[-(len(output_section) - overflow):]
+        message = f"```\n{folder_section}\n```\n```\n{output_section}\n```\n{summary_section}"
+    
+    return message
 
 
 async def update_unified_message(
@@ -183,12 +206,8 @@ async def update_unified_message(
                 is_complete=False
             )
             
-            # Build unified message
+            # Build unified message (truncation handled inside)
             content = _build_unified_message(folder_section, output_section, summary_section)
-            
-            # Truncate if needed
-            if len(content) > MAX_MESSAGE_LENGTH:
-                content = content[:MAX_MESSAGE_LENGTH - 3] + "```"
             
             # Only update if content has changed
             if content != last_content:
@@ -204,12 +223,14 @@ async def update_unified_message(
 
 
 async def read_stream(stream, output_buffer: AsyncOutputBuffer) -> None:
-    """Read from stream and append to buffer."""
+    """Read from stream and append to buffer, also logging to console."""
     while True:
         line = await stream.readline()
         if not line:
             break
         decoded = line.decode('utf-8', errors='replace')
+        # Log copilot output to console (strip trailing newline for cleaner logs)
+        logger.info(f"[copilot] {decoded.rstrip()}")
         await output_buffer.append(decoded)
 
 
@@ -391,12 +412,8 @@ async def _update_final_message(
             is_complete=True
         )
         
-        # Build final unified message
+        # Build final unified message (truncation handled inside)
         content = _build_unified_message(folder_section, output_section, summary_section)
-        
-        # Truncate if needed
-        if len(content) > MAX_MESSAGE_LENGTH:
-            content = content[:MAX_MESSAGE_LENGTH - 3] + "```"
         
         await unified_msg.edit(content=content)
     except Exception as e:
@@ -568,100 +585,107 @@ def setup_createproject_command(bot) -> Callable:
         
         await interaction.response.defer()
         
-        # Log GitHub configuration status
-        logger.info(f"GitHub enabled: {GITHUB_ENABLED}, configured: {github_manager.is_configured()}")
-        
-        # Create unique project folder
-        username = sanitize_username(interaction.user.name)
-        
-        # Initialize session log collector
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        unique_id = str(uuid.uuid4())[:UNIQUE_ID_LENGTH]
-        folder_name = f"{username}_{timestamp}_{unique_id}"
-        
-        session_log = SessionLogCollector(folder_name)
-        session_log.info(f"User '{interaction.user.name}' started /createproject")
-        session_log.info(f"Prompt: {prompt[:PROMPT_LOG_TRUNCATE_LENGTH]}{'...' if len(prompt) > PROMPT_LOG_TRUNCATE_LENGTH else ''}")
-        if model:
-            session_log.info(f"Model: {model}")
-        
-        # Build full prompt with template prepended (user prompt is kept separate for display)
-        prompt_template = get_prompt_template('createproject')
-        if prompt_template:
-            full_prompt = f"{prompt_template}\n\n{prompt}"
-            session_log.info("Prompt template prepended from config.yaml")
-        else:
-            full_prompt = prompt
-        
-        # Create project directory
-        try:
-            project_path, folder_name = await _create_project_directory(username, session_log)
-        except Exception as e:
-            session_log.error(f"Failed to create project directory: {e}")
-            await interaction.followup.send(format_error_message("Failed to create project directory", traceback.format_exc()))
-            return
-        
-        # Send initial unified message
-        try:
-            unified_msg = await _send_initial_message(interaction, project_path, prompt, model)
-        except Exception as e:
-            session_log.error(f"Failed to send Discord message: {e}")
-            await interaction.followup.send(format_error_message("Failed to send message", traceback.format_exc()))
-            return
-        
-        # State tracking with thread-safe buffer
-        output_buffer = AsyncOutputBuffer()
-        is_running = asyncio.Event()
-        is_running.set()
-        error_event = asyncio.Event()
-        
-        # Start unified update task (single 3-second timer for all sections)
-        unified_task = asyncio.create_task(
-            update_unified_message(
-                unified_msg, project_path, output_buffer, interaction,
-                prompt, model, is_running, error_event
-            )
-        )
+        # Acquire semaphore to limit parallel requests
+        semaphore = bot.request_semaphore
+        await semaphore.acquire()
         
         try:
-            # Run the copilot process with full prompt (includes template)
-            timed_out, error_occurred, error_message, process = await _run_copilot_process(
-                project_path, full_prompt, model, session_log, output_buffer, is_running, error_event
-            )
-        finally:
-            is_running.clear()
+            # Log GitHub configuration status
+            logger.info(f"GitHub enabled: {GITHUB_ENABLED}, configured: {github_manager.is_configured()}")
             
-            # Wait for update task to finish
-            unified_task.cancel()
+            # Create unique project folder
+            username = sanitize_username(interaction.user.name)
+            
+            # Initialize session log collector
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            unique_id = str(uuid.uuid4())[:UNIQUE_ID_LENGTH]
+            folder_name = f"{username}_{timestamp}_{unique_id}"
+            
+            session_log = SessionLogCollector(folder_name)
+            session_log.info(f"User '{interaction.user.name}' started /createproject")
+            session_log.info(f"Prompt: {prompt[:PROMPT_LOG_TRUNCATE_LENGTH]}{'...' if len(prompt) > PROMPT_LOG_TRUNCATE_LENGTH else ''}")
+            if model:
+                session_log.info(f"Model: {model}")
+            
+            # Build full prompt with template prepended (user prompt is kept separate for display)
+            prompt_template = get_prompt_template('createproject')
+            if prompt_template:
+                full_prompt = f"{prompt_template}\n\n{prompt}"
+                session_log.info("Prompt template prepended from config.yaml")
+            else:
+                full_prompt = prompt
+            
+            # Create project directory
             try:
-                await unified_task
-            except asyncio.CancelledError:
-                pass
-        
-        # Handle GitHub integration
-        github_status, github_success = await _handle_github_integration(
-            project_path, folder_name, prompt, timed_out, error_occurred, process, session_log
-        )
-        
-        # Final update to unified message with complete status
-        await _update_final_message(
-            unified_msg, project_path, output_buffer, interaction,
-            prompt, model, timed_out, error_occurred, error_message,
-            process, github_status
-        )
-        
-        # Count files created (excluding ignored folders)
-        file_count, dir_count = count_files_excluding_ignored(project_path)
-        
-        # Send log file attachment
-        await _send_log_file(
-            interaction, session_log, folder_name, prompt, model,
-            timed_out, error_occurred, error_message, process,
-            file_count, dir_count, output_buffer
-        )
-        
-        # Cleanup local project directory after successful GitHub push
-        if CLEANUP_AFTER_PUSH and github_success:
-            _cleanup_project_directory(project_path, session_log)
+                project_path, folder_name = await _create_project_directory(username, session_log)
+            except Exception as e:
+                session_log.error(f"Failed to create project directory: {e}")
+                await interaction.followup.send(format_error_message("Failed to create project directory", traceback.format_exc()))
+                return
+            
+            # Send initial unified message
+            try:
+                unified_msg = await _send_initial_message(interaction, project_path, prompt, model)
+            except Exception as e:
+                session_log.error(f"Failed to send Discord message: {e}")
+                await interaction.followup.send(format_error_message("Failed to send message", traceback.format_exc()))
+                return
+            
+            # State tracking with thread-safe buffer
+            output_buffer = AsyncOutputBuffer()
+            is_running = asyncio.Event()
+            is_running.set()
+            error_event = asyncio.Event()
+            
+            # Start unified update task (single 3-second timer for all sections)
+            unified_task = asyncio.create_task(
+                update_unified_message(
+                    unified_msg, project_path, output_buffer, interaction,
+                    prompt, model, is_running, error_event
+                )
+            )
+            
+            try:
+                # Run the copilot process with full prompt (includes template)
+                timed_out, error_occurred, error_message, process = await _run_copilot_process(
+                    project_path, full_prompt, model, session_log, output_buffer, is_running, error_event
+                )
+            finally:
+                is_running.clear()
+                
+                # Wait for update task to finish
+                unified_task.cancel()
+                try:
+                    await unified_task
+                except asyncio.CancelledError:
+                    pass
+            
+            # Handle GitHub integration
+            github_status, github_success = await _handle_github_integration(
+                project_path, folder_name, prompt, timed_out, error_occurred, process, session_log
+            )
+            
+            # Final update to unified message with complete status
+            await _update_final_message(
+                unified_msg, project_path, output_buffer, interaction,
+                prompt, model, timed_out, error_occurred, error_message,
+                process, github_status
+            )
+            
+            # Count files created (excluding ignored folders)
+            file_count, dir_count = count_files_excluding_ignored(project_path)
+            
+            # Send log file attachment
+            await _send_log_file(
+                interaction, session_log, folder_name, prompt, model,
+                timed_out, error_occurred, error_message, process,
+                file_count, dir_count, output_buffer
+            )
+            
+            # Cleanup local project directory after successful GitHub push
+            if CLEANUP_AFTER_PUSH and github_success:
+                _cleanup_project_directory(project_path, session_log)
+        finally:
+            semaphore.release()
     
     return createproject

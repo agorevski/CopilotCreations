@@ -10,7 +10,7 @@ from typing import Optional
 import discord
 from discord import app_commands
 
-from .config import DISCORD_BOT_TOKEN, PROJECTS_DIR, GITHUB_ENABLED, GITHUB_TOKEN, GITHUB_USERNAME
+from .config import DISCORD_BOT_TOKEN, PROJECTS_DIR, GITHUB_ENABLED, GITHUB_TOKEN, GITHUB_USERNAME, MAX_PARALLEL_REQUESTS
 from .utils.logging import logger
 
 
@@ -22,6 +22,14 @@ class CopilotBot(discord.Client):
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
         self._shutdown_event: Optional[asyncio.Event] = None
+        self._request_semaphore: Optional[asyncio.Semaphore] = None
+
+    @property
+    def request_semaphore(self) -> asyncio.Semaphore:
+        """Get or create the request semaphore for limiting parallel requests."""
+        if self._request_semaphore is None:
+            self._request_semaphore = asyncio.Semaphore(MAX_PARALLEL_REQUESTS)
+        return self._request_semaphore
 
     async def setup_hook(self) -> None:
         """Called when the bot is ready to set up commands."""
@@ -63,6 +71,7 @@ async def on_ready_handler(bot: CopilotBot) -> None:
     """Handle the on_ready event."""
     logger.info(f"Bot is ready! Logged in as {bot.user}")
     logger.info(f"Projects will be saved to: {PROJECTS_DIR.absolute()}")
+    logger.info(f"Max parallel requests: {MAX_PARALLEL_REQUESTS}")
     
     # Log GitHub configuration status
     if GITHUB_ENABLED:

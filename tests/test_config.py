@@ -17,6 +17,7 @@ from src.config import (
     UNIQUE_ID_LENGTH,
     PROGRESS_LOG_INTERVAL_SECONDS,
     GITHUB_REPO_PRIVATE,
+    MAX_PARALLEL_REQUESTS,
     init_config,
     is_initialized,
     get_prompt_template,
@@ -49,7 +50,7 @@ class TestConfig:
     def test_max_message_length(self):
         """Test that max message length is set correctly."""
         assert MAX_MESSAGE_LENGTH > 0
-        assert MAX_MESSAGE_LENGTH == 4000
+        assert MAX_MESSAGE_LENGTH == 1950  # Discord limit is 2000, leave buffer
     
     def test_copilot_default_flags(self):
         """Test that default flags are set."""
@@ -79,6 +80,16 @@ class TestConfig:
     def test_github_repo_private_is_bool(self):
         """Test that GITHUB_REPO_PRIVATE is a boolean."""
         assert isinstance(GITHUB_REPO_PRIVATE, bool)
+    
+    def test_max_parallel_requests_is_positive_int(self):
+        """Test that MAX_PARALLEL_REQUESTS is a positive integer."""
+        assert isinstance(MAX_PARALLEL_REQUESTS, int)
+        assert MAX_PARALLEL_REQUESTS > 0
+    
+    def test_max_parallel_requests_default_value(self):
+        """Test that MAX_PARALLEL_REQUESTS has a reasonable default."""
+        # Default should be 2 as specified in the config
+        assert MAX_PARALLEL_REQUESTS >= 1
 
 
 class TestConfigInitialization:

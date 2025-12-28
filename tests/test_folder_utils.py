@@ -254,7 +254,7 @@ class TestGetFolderTree:
         result = get_folder_tree(Path("/nonexistent/path"))
         assert "not yet created" in result
     
-    def test_ignored_folder_collapsed(self):
+    def test_ignored_folder_hidden(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             
@@ -264,12 +264,16 @@ class TestGetFolderTree:
             (node_modules / "package.json").touch()
             (node_modules / "index.js").touch()
             
+            # Create a non-ignored file
+            (tmppath / "readme.txt").touch()
+            
             patterns = {"node_modules"}
             result = get_folder_tree(tmppath, ignore_patterns=patterns)
             
-            assert "node_modules/" in result
-            assert "(2 files)" in result
-            assert "package.json" not in result  # Should not show contents
+            # Ignored folders should be completely hidden
+            assert "node_modules" not in result
+            assert "package.json" not in result
+            assert "readme.txt" in result
     
     def test_max_depth_limit(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -308,6 +312,6 @@ class TestGetFolderTree:
             
             result = get_folder_tree(tmppath)
             
-            # Should contain tree connectors
-            assert "├──" in result or "└──" in result
+            # Should contain tree connectors (shortened format)
+            assert "├ " in result or "└ " in result
 

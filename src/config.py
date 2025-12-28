@@ -80,11 +80,15 @@ def is_initialized() -> bool:
 TIMEOUT_MINUTES = int(os.getenv("TIMEOUT_MINUTES", "30"))
 TIMEOUT_SECONDS = TIMEOUT_MINUTES * 60
 
+# Parallelism Configuration
+MAX_PARALLEL_REQUESTS = int(os.getenv("MAX_PARALLEL_REQUESTS", "2"))
+
 # Discord Message Configuration
 UPDATE_INTERVAL = 3  # seconds - unified message update interval
-MAX_MESSAGE_LENGTH = 4000  # Discord max is 4000 for bot messages
-MAX_FOLDER_STRUCTURE_LENGTH = 750  # Max chars for folder structure section
-MAX_COPILOT_OUTPUT_LENGTH = 2500  # Max chars for copilot output section
+MAX_MESSAGE_LENGTH = 1950  # Discord max is 2000, leave buffer for safety
+MAX_FOLDER_STRUCTURE_LENGTH = 400  # Max chars for folder structure section
+MAX_COPILOT_OUTPUT_LENGTH = 800  # Max chars for copilot output section
+MAX_SUMMARY_LENGTH = 500  # Max chars for summary section
 
 # Copilot CLI Configuration
 COPILOT_DEFAULT_FLAGS = [

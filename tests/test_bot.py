@@ -5,7 +5,7 @@ Tests for bot module.
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 
-from src.config import DISCORD_BOT_TOKEN, PROJECTS_DIR
+from src.config import DISCORD_BOT_TOKEN, PROJECTS_DIR, MAX_PARALLEL_REQUESTS
 
 
 class TestBotConfiguration:
@@ -83,6 +83,62 @@ class TestCopilotBot:
         bot = create_bot()
         assert hasattr(bot, '_shutdown_event')
         assert bot._shutdown_event is None
+    
+    def test_bot_has_request_semaphore_attribute(self):
+        """Test that bot has request semaphore attribute."""
+        from src.bot import create_bot
+        bot = create_bot()
+        assert hasattr(bot, '_request_semaphore')
+        assert bot._request_semaphore is None  # Lazy initialized
+    
+    @pytest.mark.asyncio
+    async def test_bot_request_semaphore_property(self):
+        """Test that bot request_semaphore property returns a semaphore."""
+        import asyncio
+        from src.bot import create_bot
+        bot = create_bot()
+        semaphore = bot.request_semaphore
+        assert isinstance(semaphore, asyncio.Semaphore)
+    
+    @pytest.mark.asyncio
+    async def test_bot_request_semaphore_is_singleton(self):
+        """Test that bot request_semaphore property returns the same instance."""
+        from src.bot import create_bot
+        bot = create_bot()
+        semaphore1 = bot.request_semaphore
+        semaphore2 = bot.request_semaphore
+        assert semaphore1 is semaphore2
+    
+    @pytest.mark.asyncio
+    async def test_bot_request_semaphore_limits_concurrency(self):
+        """Test that semaphore correctly limits concurrent operations."""
+        import asyncio
+        from src.bot import create_bot, MAX_PARALLEL_REQUESTS
+        
+        bot = create_bot()
+        semaphore = bot.request_semaphore
+        
+        # Track concurrent operations
+        concurrent_count = 0
+        max_concurrent = 0
+        
+        async def mock_operation():
+            nonlocal concurrent_count, max_concurrent
+            await semaphore.acquire()
+            try:
+                concurrent_count += 1
+                max_concurrent = max(max_concurrent, concurrent_count)
+                await asyncio.sleep(0.05)  # Short delay
+            finally:
+                concurrent_count -= 1
+                semaphore.release()
+        
+        # Start more tasks than the limit
+        tasks = [asyncio.create_task(mock_operation()) for _ in range(MAX_PARALLEL_REQUESTS + 2)]
+        await asyncio.gather(*tasks)
+        
+        # Max concurrent should not exceed the limit
+        assert max_concurrent <= MAX_PARALLEL_REQUESTS
 
 
 class TestOnReadyHandler:
