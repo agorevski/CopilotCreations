@@ -27,6 +27,7 @@ from ..config import (
     UNIQUE_ID_LENGTH,
     PROGRESS_LOG_INTERVAL_SECONDS,
     GITHUB_ENABLED,
+    GITHUB_REPO_PRIVATE,
     CLEANUP_AFTER_PUSH,
     MAX_PROMPT_LENGTH,
     MODEL_NAME_PATTERN,
@@ -326,7 +327,7 @@ async def _handle_github_integration(
                 project_path=project_path,
                 repo_name=folder_name,
                 description=repo_description,
-                private=True
+                private=GITHUB_REPO_PRIVATE
             )
             
             if success:

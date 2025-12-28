@@ -21,6 +21,7 @@ DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 GITHUB_ENABLED = os.getenv("GITHUB_ENABLED", "false").lower() == "true"
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_USERNAME = os.getenv("GITHUB_USERNAME")
+GITHUB_REPO_PRIVATE = os.getenv("GITHUB_REPO_PRIVATE", "false").lower() == "true"
 
 # Cleanup Configuration - delete local project folder after successful GitHub push
 CLEANUP_AFTER_PUSH = os.getenv("CLEANUP_AFTER_PUSH", "true").lower() == "true"

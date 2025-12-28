@@ -16,6 +16,7 @@ from src.config import (
     PROMPT_SUMMARY_TRUNCATE_LENGTH,
     UNIQUE_ID_LENGTH,
     PROGRESS_LOG_INTERVAL_SECONDS,
+    GITHUB_REPO_PRIVATE,
     init_config,
     is_initialized,
     get_prompt_template,
@@ -74,6 +75,10 @@ class TestConfig:
         """Test that progress log interval is positive."""
         assert PROGRESS_LOG_INTERVAL_SECONDS > 0
         assert PROGRESS_LOG_INTERVAL_SECONDS == 30
+    
+    def test_github_repo_private_is_bool(self):
+        """Test that GITHUB_REPO_PRIVATE is a boolean."""
+        assert isinstance(GITHUB_REPO_PRIVATE, bool)
 
 
 class TestConfigInitialization:
