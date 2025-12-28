@@ -47,3 +47,17 @@ repository_naming_prompt: |
   Respond with ONLY the repository name, nothing else. No explanations, no quotes, just the name.
   
   Project description:
+
+# Prompt for generating repository descriptions using Azure OpenAI
+# The user's project description will be appended to this prompt
+repository_description_prompt: |
+  Generate a brief, professional description for a GitHub repository.
+  The description should be:
+  - Concise and informative (under 200 characters preferred)
+  - Describe what the project does in plain language
+  - Professional and suitable for public viewing
+  - No special characters, emojis, or markdown
+  
+  Respond with ONLY the description text, nothing else. No quotes, no explanations.
+  
+  Project description:

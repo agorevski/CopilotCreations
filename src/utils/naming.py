@@ -46,6 +46,9 @@ class RepositoryNamingGenerator:
         """Check if Azure OpenAI integration is properly configured."""
         return bool(self.endpoint and self.api_key and self.deployment_name)
     
+    # GitHub's maximum description length
+    MAX_DESCRIPTION_LENGTH = 350
+    
     def _sanitize_name(self, name: str) -> str:
         """Sanitize the generated name to be a valid repository name.
         
@@ -78,6 +81,37 @@ class RepositoryNamingGenerator:
             name = name[:50].rstrip('-')
         
         return name
+    
+    def _sanitize_description(self, description: str) -> str:
+        """Sanitize the generated description for GitHub.
+        
+        Args:
+            description: The raw generated description from the AI model.
+            
+        Returns:
+            A sanitized description suitable for a GitHub repository.
+        """
+        # Remove any quotes and trim whitespace
+        description = description.strip().strip('"\'').strip()
+        
+        # Remove control characters and non-printable characters
+        description = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', description)
+        
+        # Replace multiple whitespace with single space
+        description = re.sub(r'\s+', ' ', description)
+        
+        # Remove any emoji or special unicode characters that GitHub might reject
+        # Keep only ASCII printable characters and common unicode letters
+        description = ''.join(
+            char for char in description 
+            if ord(char) < 128 or char.isalnum() or char.isspace()
+        )
+        
+        # Truncate to GitHub's max length (350 chars)
+        if len(description) > self.MAX_DESCRIPTION_LENGTH:
+            description = description[:self.MAX_DESCRIPTION_LENGTH - 3].rstrip() + '...'
+        
+        return description
     
     def generate_name(self, project_description: str) -> Optional[str]:
         """Generate a creative repository name based on the project description.
@@ -140,6 +174,70 @@ class RepositoryNamingGenerator:
             
         except Exception as e:
             logger.error(f"Failed to generate repository name: {type(e).__name__}: {e}")
+            return None
+    
+    def generate_description(self, project_description: str) -> Optional[str]:
+        """Generate a repository description based on the project description.
+        
+        Args:
+            project_description: A description of what the project does.
+            
+        Returns:
+            A concise repository description, or None if generation fails.
+        """
+        if not self.is_configured():
+            logger.warning("Azure OpenAI not configured for description generation")
+            return None
+        
+        try:
+            # Get the description prompt from config
+            prompt_template = get_prompt_template('repository_description_prompt')
+            if not prompt_template:
+                prompt_template = (
+                    "Generate a brief, professional description for a GitHub repository. "
+                    "Keep it under 200 characters. Respond with ONLY the description. "
+                    "Project description:"
+                )
+            
+            full_prompt = f"{prompt_template} {project_description}"
+            
+            logger.info("Generating repository description using Azure OpenAI...")
+            
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are a technical writer. You generate concise, professional repository descriptions."
+                },
+                {
+                    "role": "user",
+                    "content": full_prompt
+                }
+            ]
+            
+            response = self.client.chat.completions.create(
+                model=self.deployment_name,
+                messages=messages,
+                max_completion_tokens=100,
+                stop=None,
+                stream=False
+            )
+            
+            raw_description = response.choices[0].message.content
+            if not raw_description:
+                logger.warning("Azure OpenAI returned empty description")
+                return None
+            
+            sanitized_description = self._sanitize_description(raw_description)
+            
+            if not sanitized_description:
+                logger.warning(f"Sanitization resulted in empty description from: {raw_description}")
+                return None
+            
+            logger.info(f"Generated repository description: {sanitized_description}")
+            return sanitized_description
+            
+        except Exception as e:
+            logger.error(f"Failed to generate repository description: {type(e).__name__}: {e}")
             return None
 
 

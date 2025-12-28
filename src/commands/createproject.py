@@ -496,7 +496,19 @@ async def _handle_github_integration(
         if github_manager.is_configured():
             session_log.info("Creating GitHub repository...")
             logger.info(f"Creating GitHub repository: {folder_name}")
-            repo_description = f"Created via Discord Copilot Bot: {prompt[:100]}{'...' if len(prompt) > 100 else ''}"
+            
+            # Try to generate a description using Azure OpenAI
+            repo_description = None
+            if naming_generator.is_configured():
+                repo_description = naming_generator.generate_description(prompt)
+                if repo_description:
+                    session_log.info(f"Generated repository description: {repo_description}")
+            
+            # Fallback to truncated prompt if generation fails
+            if not repo_description:
+                # Sanitize and truncate the prompt as a fallback description
+                repo_description = github_manager.sanitize_description(prompt)
+                session_log.info("Using sanitized prompt as repository description")
             
             success, message, github_url = github_manager.create_and_push_project(
                 project_path=project_path,

@@ -27,6 +27,9 @@ from .logging import logger
 class GitHubManager:
     """Manages GitHub repository operations."""
     
+    # GitHub's maximum description length
+    MAX_DESCRIPTION_LENGTH = 350
+    
     def __init__(self):
         """Initialize the GitHub manager with credentials from config."""
         self.enabled = GITHUB_ENABLED
@@ -46,6 +49,39 @@ class GitHubManager:
     def is_configured(self) -> bool:
         """Check if GitHub integration is properly configured."""
         return bool(self.enabled and self.token and self.username)
+    
+    def sanitize_description(self, description: str) -> str:
+        """Sanitize a repository description for GitHub.
+        
+        Args:
+            description: The raw description text.
+            
+        Returns:
+            A sanitized description suitable for a GitHub repository.
+        """
+        import re
+        
+        # Remove any quotes and trim whitespace
+        description = description.strip().strip('"\'').strip()
+        
+        # Remove control characters and non-printable characters
+        description = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', description)
+        
+        # Replace multiple whitespace with single space
+        description = re.sub(r'\s+', ' ', description)
+        
+        # Remove any emoji or special unicode characters that GitHub might reject
+        # Keep only ASCII printable characters
+        description = ''.join(
+            char for char in description 
+            if 32 <= ord(char) < 127
+        )
+        
+        # Truncate to GitHub's max length (350 chars)
+        if len(description) > self.MAX_DESCRIPTION_LENGTH:
+            description = description[:self.MAX_DESCRIPTION_LENGTH - 3].rstrip() + '...'
+        
+        return description
     
     def copy_gitignore(self, project_path: Path) -> bool:
         """
