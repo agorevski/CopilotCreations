@@ -387,7 +387,8 @@ async def _send_summary(
     process: Optional[asyncio.subprocess.Process],
     file_count: int,
     dir_count: int,
-    github_status: str
+    github_status: str,
+    output_buffer: AsyncOutputBuffer
 ) -> None:
     """Send the final summary message with log attachment."""
     # Determine status
@@ -407,13 +408,17 @@ async def _send_summary(
     
     session_log.info(f"Completed - Files: {file_count}, Directories: {dir_count}")
     
+    # Get the copilot output from the buffer
+    copilot_output = await output_buffer.get_content()
+    
     # Generate log markdown file
     log_markdown = session_log.get_markdown(
         prompt=prompt,
         model=model if model else 'default',
         status=status_text,
         file_count=file_count,
-        dir_count=dir_count
+        dir_count=dir_count,
+        copilot_output=copilot_output
     )
     
     summary = f"""
@@ -571,7 +576,7 @@ def setup_createproject_command(bot) -> Callable:
         await _send_summary(
             interaction, session_log, folder_name, prompt, model,
             timed_out, error_occurred, error_message, process,
-            file_count, dir_count, github_status
+            file_count, dir_count, github_status, output_buffer
         )
         
         # Cleanup local project directory after successful GitHub push

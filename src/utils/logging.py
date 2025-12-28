@@ -64,8 +64,17 @@ class SessionLogCollector:
         """Log an error message."""
         self.log("ERROR", message)
     
-    def get_markdown(self, prompt: str, model: str, status: str, file_count: int, dir_count: int) -> str:
-        """Generate markdown content for the log file."""
+    def get_markdown(self, prompt: str, model: str, status: str, file_count: int, dir_count: int, copilot_output: str = "") -> str:
+        """Generate markdown content for the log file.
+        
+        Args:
+            prompt: The user's prompt.
+            model: The model used.
+            status: The status of the operation.
+            file_count: Number of files created.
+            dir_count: Number of directories created.
+            copilot_output: The raw output from the copilot command.
+        """
         duration = datetime.now() - self.start_time
         minutes, seconds = divmod(int(duration.total_seconds()), 60)
         
@@ -83,6 +92,11 @@ class SessionLogCollector:
 ## Prompt
 ```
 {prompt}
+```
+
+## Copilot Output
+```
+{copilot_output}
 ```
 
 ## Execution Log

@@ -35,9 +35,10 @@ class TestConfig:
         assert isinstance(BASE_DIR, Path)
     
     def test_timeout_is_positive(self):
-        """Test that timeout is a positive number."""
+        """Test that timeout is a positive number and calculated correctly."""
+        from src.config import TIMEOUT_MINUTES
         assert TIMEOUT_SECONDS > 0
-        assert TIMEOUT_SECONDS == 30 * 60  # 30 minutes
+        assert TIMEOUT_SECONDS == TIMEOUT_MINUTES * 60  # Calculated from TIMEOUT_MINUTES
     
     def test_update_interval_is_positive(self):
         """Test that update interval is positive."""
