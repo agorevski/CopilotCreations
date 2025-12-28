@@ -108,13 +108,19 @@ Centralized configuration with explicit initialization:
 
 The main command is organized into modular helper functions:
 
+**Section Generator Functions:**
+- `_generate_folder_structure_section()` - Generates folder tree, truncated to 750 chars
+- `_generate_copilot_output_section()` - Generates copilot output, truncated to 2500 chars
+- `_generate_summary_section()` - Generates summary with status, prompt, model, stats, and GitHub URL
+- `_build_unified_message()` - Combines all three sections into a single message
+
 **Helper Functions:**
 - `_create_project_directory()` - Creates unique project folder
-- `_send_initial_messages()` - Sends Discord messages for progress tracking
+- `_send_initial_message()` - Sends single unified Discord message for progress tracking
 - `_run_copilot_process()` - Executes copilot CLI with timeout handling
-- `_update_final_messages()` - Updates Discord messages with final state
+- `_update_final_message()` - Updates unified message with final state
 - `_handle_github_integration()` - Creates GitHub repo and pushes code
-- `_send_summary()` - Sends final summary with log attachment
+- `_send_log_file()` - Sends log file attachment after completion
 
 **Input Validation:**
 - Empty prompts are rejected
@@ -122,9 +128,7 @@ The main command is organized into modular helper functions:
 - Model names are validated against `MODEL_NAME_PATTERN`
 
 **Shared Utilities:**
-- `update_message_with_content()` - Generic message updater (DRY pattern)
-- `update_file_tree_message()` - Updates file tree display
-- `update_output_message()` - Updates command output display
+- `update_unified_message()` - Updates all three sections in a single message every 3 seconds
 - `read_stream()` - Reads process output to async buffer
 
 ### Utilities (`src/utils/`)
@@ -180,8 +184,9 @@ User sends /createproject command
             │
             ▼
 ┌─────────────────────────┐
-│  Send Initial Messages  │
-│  _send_initial_messages()
+│  Send Initial Message   │
+│  _send_initial_message()│
+│  (single unified msg)   │
 └───────────┬─────────────┘
             │
             ▼
@@ -191,20 +196,21 @@ User sends /createproject command
 │  (uses AsyncOutputBuffer)
 └───────────┬─────────────┘
             │
-      ┌─────┴─────┐
-      ▼           ▼
-┌──────────┐ ┌──────────────┐
-│  Update  │ │   Update     │
-│  Tree    │ │   Output     │
-│  Message │ │   Message    │
-└────┬─────┘ └──────┬───────┘
-     │              │
-     └──────┬───────┘
-            │
             ▼
 ┌─────────────────────────┐
-│  Update Final Messages  │
-│  _update_final_messages()
+│  Update Unified Message │
+│  update_unified_message()│
+│  (every 3 seconds)      │
+│  ┌───────────────────┐  │
+│  │ Folder Structure  │  │
+│  │ (max 750 chars)   │  │
+│  ├───────────────────┤  │
+│  │ Copilot Output    │  │
+│  │ (max 2500 chars)  │  │
+│  ├───────────────────┤  │
+│  │ Summary Section   │  │
+│  │ (status, stats)   │  │
+│  └───────────────────┘  │
 └───────────┬─────────────┘
             │
             ▼ (if GitHub enabled)
@@ -215,16 +221,27 @@ User sends /createproject command
             │
             ▼
 ┌─────────────────────────┐
-│  Send Summary           │
-│  _send_summary()        │
+│  Update Final Message   │
+│  _update_final_message()│
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│  Send Log File          │
+│  _send_log_file()       │
 └─────────────────────────┘
 ```
 
 ## Key Features
 
 ### Real-time Updates
-- File tree and output messages update every 1 second
+- **Unified message** with folder structure, copilot output, and summary
+- Updates every 3 seconds (configurable via `UPDATE_INTERVAL`)
 - Only sends updates when content changes (rate limit friendly)
+- Each section has character limits:
+  - Folder structure: 750 characters (truncated with ellipsis)
+  - Copilot output: 2500 characters (truncated from start)
+  - Summary: Dynamic with status, stats, and GitHub URL
 
 ### Thread-Safe Operations
 - `AsyncOutputBuffer` provides atomic append and read operations
@@ -275,7 +292,7 @@ Configuration is loaded via `init_config()` at startup rather than at import tim
 
 ### DRY (Don't Repeat Yourself)
 Common patterns are extracted into reusable functions:
-- `update_message_with_content()` for generic message updates
+- Section generator functions for unified message (`_generate_folder_structure_section()`, etc.)
 - Helper functions for each distinct responsibility
 
 ### Single Responsibility
@@ -283,3 +300,22 @@ Long functions are broken into focused helper functions:
 - Each function does one thing well
 - Easier to test individual components
 - Better code organization and readability
+
+### Unified Message Format
+The progress message uses a structured format:
+```
+```
+📁 project_folder/
+├── file1.txt
+└── subdir/
+```
+```
+(copilot output here, max 2500 chars)
+```
+📋 Summary
+Status: 🔄 **IN PROGRESS**
+Prompt: user prompt here...
+Model: default
+Files: 5 | Dirs: 2
+User: username
+```

@@ -21,6 +21,8 @@ from ..config import (
     TIMEOUT_MINUTES,
     UPDATE_INTERVAL,
     MAX_MESSAGE_LENGTH,
+    MAX_FOLDER_STRUCTURE_LENGTH,
+    MAX_COPILOT_OUTPUT_LENGTH,
     COPILOT_DEFAULT_FLAGS,
     PROMPT_LOG_TRUNCATE_LENGTH,
     PROMPT_SUMMARY_TRUNCATE_LENGTH,
@@ -46,24 +48,145 @@ from ..utils import (
 from ..utils.async_buffer import AsyncOutputBuffer
 
 
-async def update_message_with_content(
+def _generate_folder_structure_section(project_path: Path) -> str:
+    """Generate the folder structure section of the unified message.
+    
+    Returns:
+        Folder structure string, truncated to MAX_FOLDER_STRUCTURE_LENGTH with ellipsis.
+    """
+    tree = get_folder_tree(project_path)
+    folder_content = f"📁 {project_path.name}/\n{tree}"
+    
+    if len(folder_content) > MAX_FOLDER_STRUCTURE_LENGTH:
+        folder_content = folder_content[:MAX_FOLDER_STRUCTURE_LENGTH - 3] + "..."
+    
+    return folder_content
+
+
+async def _generate_copilot_output_section(output_buffer: AsyncOutputBuffer) -> str:
+    """Generate the copilot output section of the unified message.
+    
+    Returns:
+        Copilot output string, truncated to MAX_COPILOT_OUTPUT_LENGTH.
+    """
+    full_output = await output_buffer.get_content()
+    if not full_output:
+        return "(waiting for output...)"
+    
+    if len(full_output) > MAX_COPILOT_OUTPUT_LENGTH:
+        return "..." + full_output[-(MAX_COPILOT_OUTPUT_LENGTH - 3):]
+    
+    return full_output
+
+
+def _generate_summary_section(
+    interaction: discord.Interaction,
+    prompt: str,
+    model: Optional[str],
+    project_path: Path,
+    timed_out: bool = False,
+    error_occurred: bool = False,
+    error_message: str = "",
+    process: Optional[asyncio.subprocess.Process] = None,
+    github_status: str = "",
+    is_complete: bool = False
+) -> str:
+    """Generate the project creation summary section.
+    
+    Args:
+        interaction: The Discord interaction.
+        prompt: The user's prompt.
+        model: The model name (if specified).
+        project_path: Path to the project directory.
+        timed_out: Whether the process timed out.
+        error_occurred: Whether an error occurred.
+        error_message: The error message (if any).
+        process: The subprocess process object.
+        github_status: GitHub integration status string.
+        is_complete: Whether the process has completed.
+    
+    Returns:
+        Summary section string.
+    """
+    # Determine status
+    if not is_complete:
+        status = "🔄 **IN PROGRESS**"
+    elif timed_out:
+        status = f"⏰ **TIMED OUT** - Process was killed after {TIMEOUT_MINUTES} minutes"
+    elif error_occurred:
+        status = format_error_message("ERROR", error_message[:100] if error_message else "Unknown error")
+    elif process and process.returncode == 0:
+        status = "✅ **COMPLETED SUCCESSFULLY**"
+    else:
+        exit_code = process.returncode if process else "unknown"
+        status = f"⚠️ **COMPLETED WITH EXIT CODE {exit_code}**"
+    
+    # Get file/directory counts
+    file_count, dir_count = count_files_excluding_ignored(project_path)
+    
+    # Truncate prompt for display
+    truncated_prompt = prompt[:PROMPT_SUMMARY_TRUNCATE_LENGTH]
+    if len(prompt) > PROMPT_SUMMARY_TRUNCATE_LENGTH:
+        truncated_prompt += "..."
+    
+    summary = f"""📋 Summary
+Status: {status}
+Prompt: {truncated_prompt}
+Model: {model if model else 'default'}
+Files: {file_count} | Dirs: {dir_count}
+User: {interaction.user.display_name}{github_status}"""
+    
+    return summary
+
+
+def _build_unified_message(
+    folder_section: str,
+    output_section: str,
+    summary_section: str
+) -> str:
+    """Build the unified message from all three sections.
+    
+    Format:
+    <Folder Structure>
+    <Copilot Output>
+    <Summary>
+    """
+    return f"```\n{folder_section}\n```\n```\n{output_section}\n```\n{summary_section}"
+
+
+async def update_unified_message(
     message: discord.Message,
-    content_generator: Callable[[], str],
+    project_path: Path,
+    output_buffer: AsyncOutputBuffer,
+    interaction: discord.Interaction,
+    prompt: str,
+    model: Optional[str],
     is_running: asyncio.Event,
     error_event: asyncio.Event
 ) -> None:
-    """Generic message updater that only updates when content changes.
+    """Update the unified message combining folder structure, output, and summary.
     
-    Args:
-        message: The Discord message to update.
-        content_generator: A callable that returns the content string.
-        is_running: Event that signals if the process is still running.
-        error_event: Event that signals if an error has occurred.
+    Polls every 3 seconds to update all three sections in a single message.
     """
     last_content = ""
+    
     while is_running.is_set() and not error_event.is_set():
         try:
-            content = content_generator()
+            # Generate all three sections
+            folder_section = _generate_folder_structure_section(project_path)
+            output_section = await _generate_copilot_output_section(output_buffer)
+            summary_section = _generate_summary_section(
+                interaction=interaction,
+                prompt=prompt,
+                model=model,
+                project_path=project_path,
+                is_complete=False
+            )
+            
+            # Build unified message
+            content = _build_unified_message(folder_section, output_section, summary_section)
+            
+            # Truncate if needed
             if len(content) > MAX_MESSAGE_LENGTH:
                 content = content[:MAX_MESSAGE_LENGTH - 3] + "```"
             
@@ -71,59 +194,12 @@ async def update_message_with_content(
             if content != last_content:
                 await message.edit(content=content)
                 last_content = content
+                
         except discord.errors.HTTPException as e:
-            logger.debug(f"HTTP error updating message: {e}")
+            logger.debug(f"HTTP error updating unified message: {e}")
         except Exception as e:
-            logger.warning(f"Unexpected error updating message: {e}")
-        await asyncio.sleep(UPDATE_INTERVAL)
-
-
-async def update_file_tree_message(
-    message: discord.Message,
-    project_path: Path,
-    is_running: asyncio.Event,
-    error_event: asyncio.Event
-) -> None:
-    """Update the file tree message only when content changes."""
-    def generate_tree_content() -> str:
-        tree = get_folder_tree(project_path)
-        return f"**📁 Project Location:** `{project_path}`\n```text\n{project_path.name}/\n{tree}\n```"
-    
-    await update_message_with_content(message, generate_tree_content, is_running, error_event)
-
-
-async def update_output_message(
-    message: discord.Message,
-    output_buffer: AsyncOutputBuffer,
-    is_running: asyncio.Event,
-    error_event: asyncio.Event
-) -> None:
-    """Update the output message only when content changes."""
-    async def generate_output_content() -> str:
-        full_output = await output_buffer.get_content()
-        truncated = truncate_output(full_output)
-        content = f"**🖥️ Copilot Output:**\n```text\n{truncated if truncated else '(waiting for output...)'}\n```"
-        if len(content) > MAX_MESSAGE_LENGTH:
-            available = MAX_MESSAGE_LENGTH - len("**🖥️ Copilot Output:**\n```text\n\n```")
-            truncated = truncate_output(full_output, available)
-            content = f"**🖥️ Copilot Output:**\n```text\n{truncated}\n```"
-        return content
-    
-    # Use a sync wrapper for the content generator pattern
-    last_content = ""
-    while is_running.is_set() and not error_event.is_set():
-        try:
-            content = await generate_output_content()
-            if len(content) > MAX_MESSAGE_LENGTH:
-                content = content[:MAX_MESSAGE_LENGTH - 3] + "```"
-            
-            if content != last_content:
-                await message.edit(content=content)
-                last_content = content
-        except discord.errors.HTTPException as e:
-            logger.debug(f"HTTP error updating output message: {e}")
-        except Exception as e:
-            logger.warning(f"Unexpected error updating output message: {e}")
+            logger.warning(f"Unexpected error updating unified message: {e}")
+        
         await asyncio.sleep(UPDATE_INTERVAL)
 
 
@@ -160,27 +236,38 @@ async def _create_project_directory(
     return project_path, folder_name
 
 
-async def _send_initial_messages(
+async def _send_initial_message(
     interaction: discord.Interaction,
     project_path: Path,
+    prompt: str,
     model: Optional[str]
-) -> Tuple[discord.Message, discord.Message]:
-    """Send initial Discord messages and return message objects.
+) -> discord.Message:
+    """Send initial unified Discord message and return message object.
     
     Returns:
-        Tuple of (file_tree_message, output_message)
+        The unified message object.
     """
-    model_info = f" (model: `{model}`)" if model else " (using default model)"
+    # Build initial unified message with placeholder content
+    folder_section = f"📁 {project_path.name}/\n(initializing...)"
+    output_section = "(starting copilot...)"
     
-    file_tree_msg = await interaction.followup.send(
-        f"**📁 Project Location:** `{project_path}`\n```text\n(initializing...)\n```",
-        wait=True
-    )
-    output_msg = await interaction.channel.send(
-        f"**🖥️ Copilot Output{model_info}:**\n```text\n(starting copilot...)\n```"
-    )
+    model_display = model if model else 'default'
+    truncated_prompt = prompt[:PROMPT_SUMMARY_TRUNCATE_LENGTH]
+    if len(prompt) > PROMPT_SUMMARY_TRUNCATE_LENGTH:
+        truncated_prompt += "..."
     
-    return file_tree_msg, output_msg
+    summary_section = f"""📋 Summary
+Status: 🔄 **IN PROGRESS**
+Prompt: {truncated_prompt}
+Model: {model_display}
+Files: 0 | Dirs: 0
+User: {interaction.user.display_name}"""
+    
+    content = _build_unified_message(folder_section, output_section, summary_section)
+    
+    unified_msg = await interaction.followup.send(content, wait=True)
+    
+    return unified_msg
 
 
 async def _run_copilot_process(
@@ -273,33 +360,47 @@ async def _run_copilot_process(
     return timed_out, error_occurred, error_message, process
 
 
-async def _update_final_messages(
-    file_tree_msg: discord.Message,
-    output_msg: discord.Message,
+async def _update_final_message(
+    unified_msg: discord.Message,
     project_path: Path,
     output_buffer: AsyncOutputBuffer,
-    model: Optional[str]
+    interaction: discord.Interaction,
+    prompt: str,
+    model: Optional[str],
+    timed_out: bool,
+    error_occurred: bool,
+    error_message: str,
+    process: Optional[asyncio.subprocess.Process],
+    github_status: str
 ) -> None:
-    """Update the final state of Discord messages."""
-    model_info = f" (model: `{model}`)" if model else " (using default model)"
-    
+    """Update the final state of the unified Discord message."""
     try:
-        tree = get_folder_tree(project_path)
-        final_tree_content = f"**📁 Project Location:** `{project_path}`\n```text\n{project_path.name}/\n{tree}\n```"
-        if len(final_tree_content) > MAX_MESSAGE_LENGTH:
-            final_tree_content = final_tree_content[:MAX_MESSAGE_LENGTH - 3] + "```"
-        await file_tree_msg.edit(content=final_tree_content)
+        # Generate final sections
+        folder_section = _generate_folder_structure_section(project_path)
+        output_section = await _generate_copilot_output_section(output_buffer)
+        summary_section = _generate_summary_section(
+            interaction=interaction,
+            prompt=prompt,
+            model=model,
+            project_path=project_path,
+            timed_out=timed_out,
+            error_occurred=error_occurred,
+            error_message=error_message,
+            process=process,
+            github_status=github_status,
+            is_complete=True
+        )
         
-        full_output = await output_buffer.get_content()
-        truncated = truncate_output(full_output)
-        final_output_content = f"**🖥️ Copilot Output{model_info}:**\n```text\n{truncated if truncated else '(no output)'}\n```"
-        if len(final_output_content) > MAX_MESSAGE_LENGTH:
-            available = MAX_MESSAGE_LENGTH - len(f"**🖥️ Copilot Output{model_info}:**\n```text\n\n```")
-            truncated = truncate_output(full_output, available)
-            final_output_content = f"**🖥️ Copilot Output{model_info}:**\n```text\n{truncated}\n```"
-        await output_msg.edit(content=final_output_content)
+        # Build final unified message
+        content = _build_unified_message(folder_section, output_section, summary_section)
+        
+        # Truncate if needed
+        if len(content) > MAX_MESSAGE_LENGTH:
+            content = content[:MAX_MESSAGE_LENGTH - 3] + "```"
+        
+        await unified_msg.edit(content=content)
     except Exception as e:
-        logger.warning(f"Error updating final messages: {e}")
+        logger.warning(f"Error updating final unified message: {e}")
 
 
 async def _handle_github_integration(
@@ -376,7 +477,7 @@ def _cleanup_project_directory(
     return False
 
 
-async def _send_summary(
+async def _send_log_file(
     interaction: discord.Interaction,
     session_log: SessionLogCollector,
     folder_name: str,
@@ -388,23 +489,18 @@ async def _send_summary(
     process: Optional[asyncio.subprocess.Process],
     file_count: int,
     dir_count: int,
-    github_status: str,
     output_buffer: AsyncOutputBuffer
 ) -> None:
-    """Send the final summary message with log attachment."""
-    # Determine status
+    """Send the log file attachment after project creation completes."""
+    # Determine status text for log
     if timed_out:
-        status = f"⏰ **TIMED OUT** - Process was killed after {TIMEOUT_MINUTES} minutes"
         status_text = "TIMED OUT"
     elif error_occurred:
-        status = format_error_message("ERROR", error_message)
         status_text = "ERROR"
     elif process and process.returncode == 0:
-        status = "✅ **COMPLETED SUCCESSFULLY**"
         status_text = "COMPLETED SUCCESSFULLY"
     else:
         exit_code = process.returncode if process else "unknown"
-        status = f"⚠️ **COMPLETED WITH EXIT CODE {exit_code}**"
         status_text = f"COMPLETED WITH EXIT CODE {exit_code}"
     
     session_log.info(f"Completed - Files: {file_count}, Directories: {dir_count}")
@@ -422,29 +518,14 @@ async def _send_summary(
         copilot_output=copilot_output
     )
     
-    summary = f"""
-**📋 Project Creation Summary**
-
-**Status:** {status}
-**Prompt:**{prompt[:PROMPT_SUMMARY_TRUNCATE_LENGTH]}{'...' if len(prompt) > PROMPT_SUMMARY_TRUNCATE_LENGTH else ''}
-**Model:** {model if model else 'default'}
-**Files Created:** {file_count}
-**Directories Created:** {dir_count}
-**User:** {interaction.user.mention}{github_status}
-"""
-    
     try:
         log_file = discord.File(
             io.BytesIO(log_markdown.encode('utf-8')),
             filename=f"{folder_name}_log.md"
         )
-        await interaction.channel.send(summary, file=log_file)
+        await interaction.channel.send(file=log_file)
     except Exception as e:
-        session_log.error(f"Failed to send summary: {e}")
-        try:
-            await interaction.channel.send(summary)
-        except Exception:
-            pass
+        session_log.error(f"Failed to send log file: {e}")
 
 
 def setup_createproject_command(bot) -> Callable:
@@ -520,12 +601,12 @@ def setup_createproject_command(bot) -> Callable:
             await interaction.followup.send(format_error_message("Failed to create project directory", traceback.format_exc()))
             return
         
-        # Send initial messages
+        # Send initial unified message
         try:
-            file_tree_msg, output_msg = await _send_initial_messages(interaction, project_path, model)
+            unified_msg = await _send_initial_message(interaction, project_path, prompt, model)
         except Exception as e:
-            session_log.error(f"Failed to send Discord messages: {e}")
-            await interaction.followup.send(format_error_message("Failed to send messages", traceback.format_exc()))
+            session_log.error(f"Failed to send Discord message: {e}")
+            await interaction.followup.send(format_error_message("Failed to send message", traceback.format_exc()))
             return
         
         # State tracking with thread-safe buffer
@@ -534,12 +615,12 @@ def setup_createproject_command(bot) -> Callable:
         is_running.set()
         error_event = asyncio.Event()
         
-        # Start update tasks
-        tree_task = asyncio.create_task(
-            update_file_tree_message(file_tree_msg, project_path, is_running, error_event)
-        )
-        output_task = asyncio.create_task(
-            update_output_message(output_msg, output_buffer, is_running, error_event)
+        # Start unified update task (single 3-second timer for all sections)
+        unified_task = asyncio.create_task(
+            update_unified_message(
+                unified_msg, project_path, output_buffer, interaction,
+                prompt, model, is_running, error_event
+            )
         )
         
         try:
@@ -550,34 +631,33 @@ def setup_createproject_command(bot) -> Callable:
         finally:
             is_running.clear()
             
-            # Wait for update tasks to finish
-            tree_task.cancel()
-            output_task.cancel()
+            # Wait for update task to finish
+            unified_task.cancel()
             try:
-                await tree_task
+                await unified_task
             except asyncio.CancelledError:
                 pass
-            try:
-                await output_task
-            except asyncio.CancelledError:
-                pass
-        
-        # Final updates
-        await _update_final_messages(file_tree_msg, output_msg, project_path, output_buffer, model)
-        
-        # Count files created (excluding ignored folders)
-        file_count, dir_count = count_files_excluding_ignored(project_path)
         
         # Handle GitHub integration
         github_status, github_success = await _handle_github_integration(
             project_path, folder_name, prompt, timed_out, error_occurred, process, session_log
         )
         
-        # Send summary message
-        await _send_summary(
+        # Final update to unified message with complete status
+        await _update_final_message(
+            unified_msg, project_path, output_buffer, interaction,
+            prompt, model, timed_out, error_occurred, error_message,
+            process, github_status
+        )
+        
+        # Count files created (excluding ignored folders)
+        file_count, dir_count = count_files_excluding_ignored(project_path)
+        
+        # Send log file attachment
+        await _send_log_file(
             interaction, session_log, folder_name, prompt, model,
             timed_out, error_occurred, error_message, process,
-            file_count, dir_count, github_status, output_buffer
+            file_count, dir_count, output_buffer
         )
         
         # Cleanup local project directory after successful GitHub push

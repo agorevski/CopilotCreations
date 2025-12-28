@@ -44,7 +44,7 @@ class TestConfig:
     def test_update_interval_is_positive(self):
         """Test that update interval is positive."""
         assert UPDATE_INTERVAL > 0
-        assert UPDATE_INTERVAL == 1
+        assert UPDATE_INTERVAL == 3  # Unified message updates every 3 seconds
     
     def test_max_message_length(self):
         """Test that max message length is set correctly."""

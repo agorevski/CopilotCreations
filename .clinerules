@@ -42,10 +42,13 @@ discord-copilot-bot/
 - **Graceful Shutdown** - Signal handlers for clean termination (SIGINT, SIGTERM)
 
 ### Message Updates
-- File tree message updates every 1 second (only when content changes)
-- Output window updates every 1 second (only when content changes)
+- **Unified Message** - Single Discord message with three sections updated every 3 seconds:
+  - Folder structure (max 750 characters)
+  - Copilot CLI output (max 2500 characters)
+  - Project creation summary with status, stats, and GitHub URL
+- Updates only when content changes (rate limit friendly)
 - **Thread-Safe Buffers** - `AsyncOutputBuffer` class for race-condition-free concurrent access
-- Final summary message on completion
+- Log file attachment on completion
 
 ### Code Organization
 - **Modular Functions** - Long command handlers are broken into focused helper functions
@@ -78,8 +81,10 @@ All magic numbers and strings should be defined in `src/config.py`:
 - `UNIQUE_ID_LENGTH` - Length of UUID prefix for unique identifiers (8 chars)
 - `PROGRESS_LOG_INTERVAL_SECONDS` - Interval for progress logging (30 seconds)
 - `TIMEOUT_SECONDS` - Process timeout duration
-- `UPDATE_INTERVAL` - Message update check interval
+- `UPDATE_INTERVAL` - Unified message update interval (3 seconds)
 - `MAX_MESSAGE_LENGTH` - Discord message character limit
+- `MAX_FOLDER_STRUCTURE_LENGTH` - Max chars for folder structure section (750)
+- `MAX_COPILOT_OUTPUT_LENGTH` - Max chars for copilot output section (2500)
 - `MAX_PROMPT_LENGTH` - Maximum prompt length (10,000 chars)
 - `MODEL_NAME_PATTERN` - Regex pattern for valid model names
 

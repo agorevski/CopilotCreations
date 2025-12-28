@@ -81,8 +81,10 @@ TIMEOUT_MINUTES = int(os.getenv("TIMEOUT_MINUTES", "30"))
 TIMEOUT_SECONDS = TIMEOUT_MINUTES * 60
 
 # Discord Message Configuration
-UPDATE_INTERVAL = 1  # seconds - check for changes every second
+UPDATE_INTERVAL = 3  # seconds - unified message update interval
 MAX_MESSAGE_LENGTH = 4000  # Discord max is 4000 for bot messages
+MAX_FOLDER_STRUCTURE_LENGTH = 750  # Max chars for folder structure section
+MAX_COPILOT_OUTPUT_LENGTH = 2500  # Max chars for copilot output section
 
 # Copilot CLI Configuration
 COPILOT_DEFAULT_FLAGS = [

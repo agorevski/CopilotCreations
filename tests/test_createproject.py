@@ -11,68 +11,263 @@ import io
 import shutil
 
 from src.commands.createproject import (
-    update_file_tree_message,
-    update_output_message,
-    update_message_with_content,
+    update_unified_message,
+    _generate_folder_structure_section,
+    _generate_copilot_output_section,
+    _generate_summary_section,
+    _build_unified_message,
     read_stream,
     setup_createproject_command,
     _create_project_directory,
-    _send_initial_messages,
-    _run_copilot_process
+    _send_initial_message,
+    _run_copilot_process,
+    _update_final_message,
+    _send_log_file
 )
-from src.config import MAX_MESSAGE_LENGTH, PROJECTS_DIR
+from src.config import MAX_MESSAGE_LENGTH, PROJECTS_DIR, MAX_FOLDER_STRUCTURE_LENGTH, MAX_COPILOT_OUTPUT_LENGTH
 from src.utils.async_buffer import AsyncOutputBuffer
 from src.utils.logging import SessionLogCollector
 
 
-class TestUpdateFileTreeMessage:
-    """Tests for update_file_tree_message function."""
+class TestGenerateFolderStructureSection:
+    """Tests for _generate_folder_structure_section function."""
     
-    @pytest.mark.asyncio
-    async def test_updates_when_content_changes(self):
-        """Test that message is updated when tree content changes."""
+    def test_generates_folder_structure(self):
+        """Test that folder structure is generated correctly."""
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
+            (tmppath / "test.txt").touch()
+            (tmppath / "subdir").mkdir()
+            
+            result = _generate_folder_structure_section(tmppath)
+            
+            assert tmppath.name in result
+            assert "test.txt" in result
+            assert "subdir" in result
+    
+    def test_truncates_long_content(self):
+        """Test that long content is truncated with ellipsis."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            # Create many files to generate long tree
+            for i in range(100):
+                (tmppath / f"file_{i:04d}.txt").touch()
+            
+            result = _generate_folder_structure_section(tmppath)
+            
+            assert len(result) <= MAX_FOLDER_STRUCTURE_LENGTH
+            assert result.endswith("...")
+    
+    def test_handles_empty_directory(self):
+        """Test handling of empty directory."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = _generate_folder_structure_section(Path(tmpdir))
+            
+            # Should contain the folder name
+            assert Path(tmpdir).name in result
+
+
+class TestGenerateCopilotOutputSection:
+    """Tests for _generate_copilot_output_section function."""
+    
+    @pytest.mark.asyncio
+    async def test_returns_buffer_content(self):
+        """Test that buffer content is returned."""
+        output_buffer = AsyncOutputBuffer()
+        await output_buffer.append("Line 1\n")
+        await output_buffer.append("Line 2\n")
+        
+        result = await _generate_copilot_output_section(output_buffer)
+        
+        assert "Line 1" in result
+        assert "Line 2" in result
+    
+    @pytest.mark.asyncio
+    async def test_returns_waiting_message_when_empty(self):
+        """Test that waiting message is returned for empty buffer."""
+        output_buffer = AsyncOutputBuffer()
+        
+        result = await _generate_copilot_output_section(output_buffer)
+        
+        assert "waiting for output" in result
+    
+    @pytest.mark.asyncio
+    async def test_truncates_long_output(self):
+        """Test that long output is truncated."""
+        output_buffer = AsyncOutputBuffer()
+        await output_buffer.append("x" * 5000)
+        
+        result = await _generate_copilot_output_section(output_buffer)
+        
+        assert len(result) <= MAX_COPILOT_OUTPUT_LENGTH
+        assert result.startswith("...")
+
+
+class TestGenerateSummarySection:
+    """Tests for _generate_summary_section function."""
+    
+    @pytest.fixture
+    def mock_interaction(self):
+        """Create a mock Discord interaction."""
+        interaction = AsyncMock()
+        interaction.user = MagicMock()
+        interaction.user.display_name = "testuser"
+        return interaction
+    
+    def test_generates_in_progress_status(self, mock_interaction):
+        """Test that IN PROGRESS status is shown when not complete."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = _generate_summary_section(
+                interaction=mock_interaction,
+                prompt="test prompt",
+                model=None,
+                project_path=Path(tmpdir),
+                is_complete=False
+            )
+            
+            assert "IN PROGRESS" in result
+    
+    def test_generates_success_status(self, mock_interaction):
+        """Test that SUCCESS status is shown on successful completion."""
+        mock_process = MagicMock()
+        mock_process.returncode = 0
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = _generate_summary_section(
+                interaction=mock_interaction,
+                prompt="test prompt",
+                model=None,
+                project_path=Path(tmpdir),
+                process=mock_process,
+                is_complete=True
+            )
+            
+            assert "COMPLETED SUCCESSFULLY" in result
+    
+    def test_generates_timeout_status(self, mock_interaction):
+        """Test that TIMEOUT status is shown on timeout."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = _generate_summary_section(
+                interaction=mock_interaction,
+                prompt="test prompt",
+                model=None,
+                project_path=Path(tmpdir),
+                timed_out=True,
+                is_complete=True
+            )
+            
+            assert "TIMED OUT" in result
+    
+    def test_includes_github_status(self, mock_interaction):
+        """Test that GitHub status is included."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = _generate_summary_section(
+                interaction=mock_interaction,
+                prompt="test prompt",
+                model=None,
+                project_path=Path(tmpdir),
+                github_status="\nGitHub: https://github.com/test",
+                is_complete=True
+            )
+            
+            assert "GitHub" in result
+    
+    def test_truncates_long_prompt(self, mock_interaction):
+        """Test that long prompts are truncated."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            long_prompt = "x" * 500
+            result = _generate_summary_section(
+                interaction=mock_interaction,
+                prompt=long_prompt,
+                model=None,
+                project_path=Path(tmpdir),
+                is_complete=False
+            )
+            
+            assert "..." in result
+
+
+class TestBuildUnifiedMessage:
+    """Tests for _build_unified_message function."""
+    
+    def test_builds_message_with_all_sections(self):
+        """Test that unified message contains all three sections."""
+        folder_section = "📁 test_folder/\nfile.txt"
+        output_section = "Building project..."
+        summary_section = "Status: IN PROGRESS"
+        
+        result = _build_unified_message(folder_section, output_section, summary_section)
+        
+        assert folder_section in result
+        assert output_section in result
+        assert summary_section in result
+    
+    def test_uses_code_blocks(self):
+        """Test that code blocks are used for folder and output sections."""
+        result = _build_unified_message("folder", "output", "summary")
+        
+        assert result.count("```") >= 4  # At least 2 pairs of code blocks
+
+
+class TestUpdateUnifiedMessage:
+    """Tests for update_unified_message function."""
+    
+    @pytest.fixture
+    def mock_interaction(self):
+        """Create a mock Discord interaction."""
+        interaction = AsyncMock()
+        interaction.user = MagicMock()
+        interaction.user.display_name = "testuser"
+        return interaction
+    
+    @pytest.mark.asyncio
+    async def test_updates_message_periodically(self, mock_interaction):
+        """Test that message is updated periodically."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            (tmppath / "test.txt").touch()
             
             mock_message = AsyncMock()
+            output_buffer = AsyncOutputBuffer()
+            await output_buffer.append("test output")
             is_running = asyncio.Event()
             is_running.set()
             error_event = asyncio.Event()
             
-            # Create a file to generate tree content
-            (tmppath / "test.txt").touch()
-            
-            # Run for a short time then stop
             async def stop_after_delay():
                 await asyncio.sleep(0.1)
                 is_running.clear()
             
             await asyncio.gather(
-                update_file_tree_message(mock_message, tmppath, is_running, error_event),
+                update_unified_message(
+                    mock_message, tmppath, output_buffer, mock_interaction,
+                    "test prompt", None, is_running, error_event
+                ),
                 stop_after_delay()
             )
             
-            # Verify message.edit was called
             assert mock_message.edit.called
     
     @pytest.mark.asyncio
-    async def test_stops_on_error_event(self):
+    async def test_stops_on_error_event(self, mock_interaction):
         """Test that update stops when error event is set."""
         with tempfile.TemporaryDirectory() as tmpdir:
             mock_message = AsyncMock()
+            output_buffer = AsyncOutputBuffer()
             is_running = asyncio.Event()
             is_running.set()
             error_event = asyncio.Event()
             error_event.set()  # Set error immediately
             
-            # Should return quickly without updating
-            await update_file_tree_message(mock_message, Path(tmpdir), is_running, error_event)
+            await update_unified_message(
+                mock_message, Path(tmpdir), output_buffer, mock_interaction,
+                "test prompt", None, is_running, error_event
+            )
             
-            # Should not have called edit since error was set
             assert not mock_message.edit.called
     
     @pytest.mark.asyncio
-    async def test_handles_http_exception(self):
+    async def test_handles_http_exception(self, mock_interaction):
         """Test that HTTP exceptions are handled gracefully."""
         import discord
         
@@ -84,6 +279,7 @@ class TestUpdateFileTreeMessage:
             mock_message.edit.side_effect = discord.errors.HTTPException(
                 MagicMock(), "Rate limited"
             )
+            output_buffer = AsyncOutputBuffer()
             is_running = asyncio.Event()
             is_running.set()
             error_event = asyncio.Event()
@@ -94,233 +290,12 @@ class TestUpdateFileTreeMessage:
             
             # Should not raise exception
             await asyncio.gather(
-                update_file_tree_message(mock_message, tmppath, is_running, error_event),
+                update_unified_message(
+                    mock_message, tmppath, output_buffer, mock_interaction,
+                    "test prompt", None, is_running, error_event
+                ),
                 stop_after_delay()
             )
-    
-    @pytest.mark.asyncio
-    async def test_skips_update_when_content_unchanged(self):
-        """Test that no update is sent when content hasn't changed."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmppath = Path(tmpdir)
-            (tmppath / "static.txt").touch()
-            
-            mock_message = AsyncMock()
-            is_running = asyncio.Event()
-            is_running.set()
-            error_event = asyncio.Event()
-            
-            call_count = [0]
-            original_edit = mock_message.edit
-            
-            async def counting_edit(*args, **kwargs):
-                call_count[0] += 1
-                return await original_edit(*args, **kwargs)
-            
-            mock_message.edit = counting_edit
-            
-            async def stop_after_delay():
-                await asyncio.sleep(0.15)  # Enough for 2 iterations
-                is_running.clear()
-            
-            await asyncio.gather(
-                update_file_tree_message(mock_message, tmppath, is_running, error_event),
-                stop_after_delay()
-            )
-            
-            # Should only call edit once since content doesn't change
-            assert call_count[0] == 1
-    
-    @pytest.mark.asyncio
-    async def test_truncates_long_content(self):
-        """Test that long content is truncated."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmppath = Path(tmpdir)
-            
-            # Create many files to generate long tree
-            for i in range(100):
-                (tmppath / f"file_{i:04d}.txt").touch()
-            
-            mock_message = AsyncMock()
-            is_running = asyncio.Event()
-            is_running.set()
-            error_event = asyncio.Event()
-            
-            async def stop_after_delay():
-                await asyncio.sleep(0.1)
-                is_running.clear()
-            
-            await asyncio.gather(
-                update_file_tree_message(mock_message, tmppath, is_running, error_event),
-                stop_after_delay()
-            )
-            
-            # Check that edit was called with content <= MAX_MESSAGE_LENGTH
-            call_args = mock_message.edit.call_args
-            if call_args:
-                content = call_args.kwargs.get('content', '')
-                assert len(content) <= MAX_MESSAGE_LENGTH
-    
-    @pytest.mark.asyncio
-    async def test_handles_generic_exception(self):
-        """Test that generic exceptions are handled gracefully."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmppath = Path(tmpdir)
-            (tmppath / "test.txt").touch()
-            
-            mock_message = AsyncMock()
-            mock_message.edit.side_effect = RuntimeError("Unexpected error")
-            is_running = asyncio.Event()
-            is_running.set()
-            error_event = asyncio.Event()
-            
-            async def stop_after_delay():
-                await asyncio.sleep(0.1)
-                is_running.clear()
-            
-            # Should not raise exception
-            await asyncio.gather(
-                update_file_tree_message(mock_message, tmppath, is_running, error_event),
-                stop_after_delay()
-            )
-
-
-class TestUpdateOutputMessage:
-    """Tests for update_output_message function."""
-    
-    @pytest.mark.asyncio
-    async def test_updates_with_buffer_content(self):
-        """Test that output message updates with buffer content."""
-        mock_message = AsyncMock()
-        output_buffer = AsyncOutputBuffer()
-        await output_buffer.append("Line 1\n")
-        await output_buffer.append("Line 2\n")
-        is_running = asyncio.Event()
-        is_running.set()
-        error_event = asyncio.Event()
-        
-        async def stop_after_delay():
-            await asyncio.sleep(0.1)
-            is_running.clear()
-        
-        await asyncio.gather(
-            update_output_message(mock_message, output_buffer, is_running, error_event),
-            stop_after_delay()
-        )
-        
-        assert mock_message.edit.called
-        # Check that the content includes buffer text
-        call_args = mock_message.edit.call_args
-        assert "Line 1" in str(call_args) or "Line 2" in str(call_args)
-    
-    @pytest.mark.asyncio
-    async def test_shows_waiting_message_when_empty(self):
-        """Test that waiting message is shown for empty buffer."""
-        mock_message = AsyncMock()
-        output_buffer = AsyncOutputBuffer()
-        is_running = asyncio.Event()
-        is_running.set()
-        error_event = asyncio.Event()
-        
-        async def stop_after_delay():
-            await asyncio.sleep(0.1)
-            is_running.clear()
-        
-        await asyncio.gather(
-            update_output_message(mock_message, output_buffer, is_running, error_event),
-            stop_after_delay()
-        )
-        
-        assert mock_message.edit.called
-        call_args = str(mock_message.edit.call_args)
-        assert "waiting for output" in call_args
-    
-    @pytest.mark.asyncio
-    async def test_handles_http_exception(self):
-        """Test that HTTP exceptions are handled gracefully."""
-        import discord
-        
-        mock_message = AsyncMock()
-        mock_message.edit.side_effect = discord.errors.HTTPException(
-            MagicMock(), "Rate limited"
-        )
-        output_buffer = AsyncOutputBuffer()
-        await output_buffer.append("test")
-        is_running = asyncio.Event()
-        is_running.set()
-        error_event = asyncio.Event()
-        
-        async def stop_after_delay():
-            await asyncio.sleep(0.1)
-            is_running.clear()
-        
-        # Should not raise exception
-        await asyncio.gather(
-            update_output_message(mock_message, output_buffer, is_running, error_event),
-            stop_after_delay()
-        )
-    
-    @pytest.mark.asyncio
-    async def test_truncates_long_output(self):
-        """Test that long output is truncated."""
-        mock_message = AsyncMock()
-        # Create very long output
-        output_buffer = AsyncOutputBuffer()
-        await output_buffer.append("x" * 10000)
-        is_running = asyncio.Event()
-        is_running.set()
-        error_event = asyncio.Event()
-        
-        async def stop_after_delay():
-            await asyncio.sleep(0.1)
-            is_running.clear()
-        
-        await asyncio.gather(
-            update_output_message(mock_message, output_buffer, is_running, error_event),
-            stop_after_delay()
-        )
-        
-        # Check that edit was called with content <= MAX_MESSAGE_LENGTH
-        call_args = mock_message.edit.call_args
-        if call_args:
-            content = call_args.kwargs.get('content', '')
-            assert len(content) <= MAX_MESSAGE_LENGTH
-    
-    @pytest.mark.asyncio
-    async def test_stops_on_error_event(self):
-        """Test that update stops when error event is set."""
-        mock_message = AsyncMock()
-        output_buffer = AsyncOutputBuffer()
-        await output_buffer.append("test")
-        is_running = asyncio.Event()
-        is_running.set()
-        error_event = asyncio.Event()
-        error_event.set()  # Set error immediately
-        
-        await update_output_message(mock_message, output_buffer, is_running, error_event)
-        
-        assert not mock_message.edit.called
-    
-    @pytest.mark.asyncio
-    async def test_handles_generic_exception(self):
-        """Test that generic exceptions are handled gracefully."""
-        mock_message = AsyncMock()
-        mock_message.edit.side_effect = RuntimeError("Unexpected error")
-        output_buffer = AsyncOutputBuffer()
-        await output_buffer.append("test")
-        is_running = asyncio.Event()
-        is_running.set()
-        error_event = asyncio.Event()
-        
-        async def stop_after_delay():
-            await asyncio.sleep(0.1)
-            is_running.clear()
-        
-        # Should not raise exception
-        await asyncio.gather(
-            update_output_message(mock_message, output_buffer, is_running, error_event),
-            stop_after_delay()
-        )
 
 
 class TestReadStream:
@@ -491,50 +466,6 @@ class TestCreateprojectCommandHandler:
         
         # Verify defer was called
         mock_interaction.response.defer.assert_called_once()
-
-
-class TestUpdateMessageWithContent:
-    """Tests for the generic update_message_with_content function."""
-    
-    @pytest.mark.asyncio
-    async def test_updates_when_content_changes(self):
-        """Test that message is updated when content changes."""
-        mock_message = AsyncMock()
-        call_count = [0]
-        
-        def content_generator():
-            call_count[0] += 1
-            return f"Content {call_count[0]}"
-        
-        is_running = asyncio.Event()
-        is_running.set()
-        error_event = asyncio.Event()
-        
-        async def stop_after_delay():
-            await asyncio.sleep(0.15)
-            is_running.clear()
-        
-        await asyncio.gather(
-            update_message_with_content(mock_message, content_generator, is_running, error_event),
-            stop_after_delay()
-        )
-        
-        # Should have called edit at least once
-        assert mock_message.edit.called
-    
-    @pytest.mark.asyncio
-    async def test_stops_on_error_event(self):
-        """Test that update stops when error event is set."""
-        mock_message = AsyncMock()
-        is_running = asyncio.Event()
-        is_running.set()
-        error_event = asyncio.Event()
-        error_event.set()  # Set error immediately
-        
-        await update_message_with_content(mock_message, lambda: "test", is_running, error_event)
-        
-        # Should not have called edit since error was set
-        assert not mock_message.edit.called
 
 
 class TestRunCopilotProcess:
@@ -757,145 +688,129 @@ class TestHelperFunctions:
                 assert "testuser" in folder_name
     
     @pytest.mark.asyncio
-    async def test_send_initial_messages(self):
-        """Test that _send_initial_messages sends two messages."""
+    async def test_send_initial_message(self):
+        """Test that _send_initial_message sends a unified message."""
         mock_interaction = AsyncMock()
-        mock_file_tree_msg = AsyncMock()
-        mock_output_msg = AsyncMock()
+        mock_unified_msg = AsyncMock()
+        mock_interaction.user = MagicMock()
+        mock_interaction.user.display_name = "testuser"
         
-        mock_interaction.followup.send = AsyncMock(return_value=mock_file_tree_msg)
-        mock_interaction.channel.send = AsyncMock(return_value=mock_output_msg)
+        mock_interaction.followup.send = AsyncMock(return_value=mock_unified_msg)
         
         with tempfile.TemporaryDirectory() as tmpdir:
             project_path = Path(tmpdir)
             
-            file_tree_msg, output_msg = await _send_initial_messages(
-                mock_interaction, project_path, None
+            unified_msg = await _send_initial_message(
+                mock_interaction, project_path, "test prompt", None
             )
             
             assert mock_interaction.followup.send.called
-            assert mock_interaction.channel.send.called
+            assert unified_msg == mock_unified_msg
     
     @pytest.mark.asyncio
-    async def test_send_initial_messages_with_model(self):
-        """Test that _send_initial_messages includes model info."""
+    async def test_send_initial_message_with_model(self):
+        """Test that _send_initial_message includes model info."""
         mock_interaction = AsyncMock()
-        mock_file_tree_msg = AsyncMock()
-        mock_output_msg = AsyncMock()
+        mock_unified_msg = AsyncMock()
+        mock_interaction.user = MagicMock()
+        mock_interaction.user.display_name = "testuser"
         
-        mock_interaction.followup.send = AsyncMock(return_value=mock_file_tree_msg)
-        mock_interaction.channel.send = AsyncMock(return_value=mock_output_msg)
+        mock_interaction.followup.send = AsyncMock(return_value=mock_unified_msg)
         
         with tempfile.TemporaryDirectory() as tmpdir:
             project_path = Path(tmpdir)
             
-            await _send_initial_messages(mock_interaction, project_path, "gpt-4")
+            await _send_initial_message(mock_interaction, project_path, "test prompt", "gpt-4")
             
-            # Check that model was included in output message
-            call_args = str(mock_interaction.channel.send.call_args)
+            # Check that model was included in message
+            call_args = str(mock_interaction.followup.send.call_args)
             assert "gpt-4" in call_args
 
 
-class TestUpdateFinalMessages:
-    """Tests for _update_final_messages function."""
+class TestUpdateFinalMessage:
+    """Tests for _update_final_message function."""
+    
+    @pytest.fixture
+    def mock_interaction(self):
+        """Create a mock Discord interaction."""
+        interaction = AsyncMock()
+        interaction.user = MagicMock()
+        interaction.user.display_name = "testuser"
+        return interaction
     
     @pytest.mark.asyncio
-    async def test_update_final_messages_success(self):
-        """Test that _update_final_messages updates both messages."""
-        from src.commands.createproject import _update_final_messages
-        
-        mock_file_tree_msg = AsyncMock()
-        mock_output_msg = AsyncMock()
+    async def test_update_final_message_success(self, mock_interaction):
+        """Test that _update_final_message updates the unified message."""
+        mock_unified_msg = AsyncMock()
         output_buffer = AsyncOutputBuffer()
         await output_buffer.append("Test output")
+        mock_process = MagicMock()
+        mock_process.returncode = 0
         
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             (tmppath / "test.txt").touch()
             
-            await _update_final_messages(
-                mock_file_tree_msg, mock_output_msg, tmppath, output_buffer, None
+            await _update_final_message(
+                mock_unified_msg, tmppath, output_buffer, mock_interaction,
+                "test prompt", None, False, False, "", mock_process, ""
             )
             
-            assert mock_file_tree_msg.edit.called
-            assert mock_output_msg.edit.called
+            assert mock_unified_msg.edit.called
     
     @pytest.mark.asyncio
-    async def test_update_final_messages_with_model(self):
-        """Test that _update_final_messages includes model info."""
-        from src.commands.createproject import _update_final_messages
-        
-        mock_file_tree_msg = AsyncMock()
-        mock_output_msg = AsyncMock()
+    async def test_update_final_message_with_model(self, mock_interaction):
+        """Test that _update_final_message includes model info."""
+        mock_unified_msg = AsyncMock()
         output_buffer = AsyncOutputBuffer()
         await output_buffer.append("Test output")
+        mock_process = MagicMock()
+        mock_process.returncode = 0
         
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             
-            await _update_final_messages(
-                mock_file_tree_msg, mock_output_msg, tmppath, output_buffer, "claude-3"
+            await _update_final_message(
+                mock_unified_msg, tmppath, output_buffer, mock_interaction,
+                "test prompt", "claude-3", False, False, "", mock_process, ""
             )
             
-            call_args = str(mock_output_msg.edit.call_args)
+            call_args = str(mock_unified_msg.edit.call_args)
             assert "claude-3" in call_args
     
     @pytest.mark.asyncio
-    async def test_update_final_messages_empty_output(self):
-        """Test that _update_final_messages handles empty output."""
-        from src.commands.createproject import _update_final_messages
-        
-        mock_file_tree_msg = AsyncMock()
-        mock_output_msg = AsyncMock()
-        output_buffer = AsyncOutputBuffer()
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmppath = Path(tmpdir)
-            
-            await _update_final_messages(
-                mock_file_tree_msg, mock_output_msg, tmppath, output_buffer, None
-            )
-            
-            call_args = str(mock_output_msg.edit.call_args)
-            assert "no output" in call_args
-    
-    @pytest.mark.asyncio
-    async def test_update_final_messages_handles_exception(self):
-        """Test that _update_final_messages handles exceptions gracefully."""
-        from src.commands.createproject import _update_final_messages
-        
-        mock_file_tree_msg = AsyncMock()
-        mock_file_tree_msg.edit.side_effect = RuntimeError("Test error")
-        mock_output_msg = AsyncMock()
+    async def test_update_final_message_handles_exception(self, mock_interaction):
+        """Test that _update_final_message handles exceptions gracefully."""
+        mock_unified_msg = AsyncMock()
+        mock_unified_msg.edit.side_effect = RuntimeError("Test error")
         output_buffer = AsyncOutputBuffer()
         
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             
             # Should not raise exception
-            await _update_final_messages(
-                mock_file_tree_msg, mock_output_msg, tmppath, output_buffer, None
+            await _update_final_message(
+                mock_unified_msg, tmppath, output_buffer, mock_interaction,
+                "test prompt", None, False, False, "", None, ""
             )
     
     @pytest.mark.asyncio
-    async def test_update_final_messages_truncates_long_content(self):
-        """Test that _update_final_messages truncates long output."""
-        from src.commands.createproject import _update_final_messages
-        
-        mock_file_tree_msg = AsyncMock()
-        mock_output_msg = AsyncMock()
+    async def test_update_final_message_truncates_long_content(self, mock_interaction):
+        """Test that _update_final_message truncates long output."""
+        mock_unified_msg = AsyncMock()
         output_buffer = AsyncOutputBuffer()
         await output_buffer.append("x" * 10000)  # Very long output
         
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             
-            await _update_final_messages(
-                mock_file_tree_msg, mock_output_msg, tmppath, output_buffer, None
+            await _update_final_message(
+                mock_unified_msg, tmppath, output_buffer, mock_interaction,
+                "test prompt", None, False, False, "", None, ""
             )
             
             # Verify content was truncated
-            call_args = mock_output_msg.edit.call_args
+            call_args = mock_unified_msg.edit.call_args
             if call_args:
                 content = call_args.kwargs.get('content', '')
                 assert len(content) <= MAX_MESSAGE_LENGTH
@@ -1106,17 +1021,14 @@ class TestCleanupProjectDirectory:
                 shutil.rmtree(project_path)
 
 
-class TestSendSummary:
-    """Tests for _send_summary function."""
+class TestSendLogFile:
+    """Tests for _send_log_file function."""
     
     @pytest.mark.asyncio
-    async def test_send_summary_success(self):
-        """Test sending summary on successful completion."""
-        from src.commands.createproject import _send_summary
-        
+    async def test_send_log_file_success(self):
+        """Test sending log file on successful completion."""
         mock_interaction = AsyncMock()
         mock_interaction.channel.send = AsyncMock()
-        mock_interaction.user.mention = "@testuser"
         
         session_log = SessionLogCollector("test")
         mock_process = MagicMock()
@@ -1124,159 +1036,56 @@ class TestSendSummary:
         output_buffer = AsyncOutputBuffer()
         await output_buffer.append("Test output")
         
-        await _send_summary(
+        await _send_log_file(
             mock_interaction, session_log, "test_folder", "test prompt", None,
-            False, False, "", mock_process, 5, 2, "", output_buffer
+            False, False, "", mock_process, 5, 2, output_buffer
         )
         
         assert mock_interaction.channel.send.called
-        call_args = str(mock_interaction.channel.send.call_args)
-        assert "COMPLETED SUCCESSFULLY" in call_args
+        # Check that a file was sent
+        call_kwargs = mock_interaction.channel.send.call_args
+        assert 'file' in call_kwargs.kwargs
     
     @pytest.mark.asyncio
-    async def test_send_summary_timeout(self):
-        """Test sending summary on timeout."""
-        from src.commands.createproject import _send_summary
-        
+    async def test_send_log_file_timeout(self):
+        """Test sending log file on timeout."""
         mock_interaction = AsyncMock()
         mock_interaction.channel.send = AsyncMock()
-        mock_interaction.user.mention = "@testuser"
         
         session_log = SessionLogCollector("test")
         mock_process = MagicMock()
         mock_process.returncode = -9
         output_buffer = AsyncOutputBuffer()
         
-        await _send_summary(
+        await _send_log_file(
             mock_interaction, session_log, "test_folder", "test prompt", None,
-            True, False, "", mock_process, 0, 0, "", output_buffer  # timed_out=True
+            True, False, "", mock_process, 0, 0, output_buffer  # timed_out=True
         )
         
-        call_args = str(mock_interaction.channel.send.call_args)
-        assert "TIMED OUT" in call_args
+        assert mock_interaction.channel.send.called
     
     @pytest.mark.asyncio
-    async def test_send_summary_error(self):
-        """Test sending summary on error."""
-        from src.commands.createproject import _send_summary
-        
+    async def test_send_log_file_error(self):
+        """Test sending log file on error."""
         mock_interaction = AsyncMock()
         mock_interaction.channel.send = AsyncMock()
-        mock_interaction.user.mention = "@testuser"
         
         session_log = SessionLogCollector("test")
         mock_process = None
         output_buffer = AsyncOutputBuffer()
         
-        await _send_summary(
+        await _send_log_file(
             mock_interaction, session_log, "test_folder", "test prompt", None,
-            False, True, "Error occurred", mock_process, 0, 0, "", output_buffer  # error_occurred=True
+            False, True, "Error occurred", mock_process, 0, 0, output_buffer  # error_occurred=True
         )
         
-        call_args = str(mock_interaction.channel.send.call_args)
-        assert "ERROR" in call_args
+        assert mock_interaction.channel.send.called
     
     @pytest.mark.asyncio
-    async def test_send_summary_nonzero_exit(self):
-        """Test sending summary on non-zero exit code."""
-        from src.commands.createproject import _send_summary
-        
-        mock_interaction = AsyncMock()
-        mock_interaction.channel.send = AsyncMock()
-        mock_interaction.user.mention = "@testuser"
-        
-        session_log = SessionLogCollector("test")
-        mock_process = MagicMock()
-        mock_process.returncode = 1
-        output_buffer = AsyncOutputBuffer()
-        
-        await _send_summary(
-            mock_interaction, session_log, "test_folder", "test prompt", "gpt-4",
-            False, False, "", mock_process, 3, 1, "", output_buffer
-        )
-        
-        call_args = str(mock_interaction.channel.send.call_args)
-        assert "EXIT CODE 1" in call_args
-    
-    @pytest.mark.asyncio
-    async def test_send_summary_with_github_status(self):
-        """Test sending summary with GitHub status."""
-        from src.commands.createproject import _send_summary
-        
-        mock_interaction = AsyncMock()
-        mock_interaction.channel.send = AsyncMock()
-        mock_interaction.user.mention = "@testuser"
-        
-        session_log = SessionLogCollector("test")
-        mock_process = MagicMock()
-        mock_process.returncode = 0
-        output_buffer = AsyncOutputBuffer()
-        
-        github_status = "\n**🐙 GitHub:** [View Repository](https://github.com/test/repo)"
-        
-        await _send_summary(
-            mock_interaction, session_log, "test_folder", "test prompt", None,
-            False, False, "", mock_process, 5, 2, github_status, output_buffer
-        )
-        
-        call_args = str(mock_interaction.channel.send.call_args)
-        assert "GitHub" in call_args
-    
-    @pytest.mark.asyncio
-    async def test_send_summary_handles_send_exception(self):
-        """Test sending summary handles exception and falls back."""
-        from src.commands.createproject import _send_summary
-        import discord
-        
-        mock_interaction = AsyncMock()
-        # First call raises, second succeeds
-        mock_interaction.channel.send = AsyncMock(
-            side_effect=[RuntimeError("File too large"), None]
-        )
-        mock_interaction.user.mention = "@testuser"
-        
-        session_log = SessionLogCollector("test")
-        mock_process = MagicMock()
-        mock_process.returncode = 0
-        output_buffer = AsyncOutputBuffer()
-        
-        # Should not raise exception
-        await _send_summary(
-            mock_interaction, session_log, "test_folder", "test prompt", None,
-            False, False, "", mock_process, 5, 2, "", output_buffer
-        )
-        
-        # Should have been called twice (once with file, once without)
-        assert mock_interaction.channel.send.call_count == 2
-    
-    @pytest.mark.asyncio
-    async def test_send_summary_no_process(self):
-        """Test sending summary when process is None."""
-        from src.commands.createproject import _send_summary
-        
-        mock_interaction = AsyncMock()
-        mock_interaction.channel.send = AsyncMock()
-        mock_interaction.user.mention = "@testuser"
-        
-        session_log = SessionLogCollector("test")
-        output_buffer = AsyncOutputBuffer()
-        
-        await _send_summary(
-            mock_interaction, session_log, "test_folder", "test prompt", None,
-            False, False, "", None, 0, 0, "", output_buffer  # process=None
-        )
-        
-        call_args = str(mock_interaction.channel.send.call_args)
-        assert "unknown" in call_args
-    
-    @pytest.mark.asyncio
-    async def test_send_summary_includes_copilot_output_in_log(self):
+    async def test_send_log_file_includes_copilot_output(self):
         """Test that copilot output is included in the log file attachment."""
-        from src.commands.createproject import _send_summary
-        
         mock_interaction = AsyncMock()
         mock_interaction.channel.send = AsyncMock()
-        mock_interaction.user.mention = "@testuser"
         
         session_log = SessionLogCollector("test")
         mock_process = MagicMock()
@@ -1286,9 +1095,9 @@ class TestSendSummary:
         output_buffer = AsyncOutputBuffer()
         await output_buffer.append(copilot_output)
         
-        await _send_summary(
+        await _send_log_file(
             mock_interaction, session_log, "test_folder", "test prompt", None,
-            False, False, "", mock_process, 5, 2, "", output_buffer
+            False, False, "", mock_process, 5, 2, output_buffer
         )
         
         # Check that the log file contains the copilot output

@@ -5,7 +5,7 @@ A Discord bot that executes `copilot-cli` to create projects based on user promp
 ## Features
 
 - `/createproject` slash command to generate projects from natural language prompts
-- Real-time file tree and output updates in Discord
+- **Unified real-time progress** - Single message with folder structure, copilot output, and summary updated every 3 seconds
 - 30-minute timeout protection with concurrent user support
 - Session logging with markdown log file attachments
 - **GitHub Integration** - Automatically create repositories and push project files
