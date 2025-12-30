@@ -438,28 +438,60 @@ async def _update_final_message(
     error_occurred: bool,
     error_message: str,
     process: Optional[asyncio.subprocess.Process],
-    github_status: str
+    github_status: str,
+    project_name: Optional[str] = None,
+    description: Optional[str] = None,
+    github_url: Optional[str] = None
 ) -> None:
-    """Update the final state of the unified Discord message."""
+    """Update the final state of the unified Discord message.
+    
+    On successful completion, shows a clean summary without folder structure or copilot output.
+    On failure/timeout, shows the full message with all sections for debugging.
+    """
     try:
-        # Generate final sections
-        folder_section = _generate_folder_structure_section(project_path)
-        output_section = await _generate_copilot_output_section(output_buffer)
-        summary_section = _generate_summary_section(
-            interaction=interaction,
-            prompt=prompt,
-            model=model,
-            project_path=project_path,
-            timed_out=timed_out,
-            error_occurred=error_occurred,
-            error_message=error_message,
-            process=process,
-            github_status=github_status,
-            is_complete=True
-        )
+        # Check if project completed successfully
+        is_success = (not timed_out and not error_occurred and process and process.returncode == 0)
         
-        # Build final unified message (truncation handled inside)
-        content = _build_unified_message(folder_section, output_section, summary_section)
+        if is_success:
+            # Build clean summary-only message for successful completion
+            file_count, dir_count = count_files_excluding_ignored(project_path)
+            
+            # Use folder_name as project name if not provided
+            display_name = project_name if project_name else project_path.name
+            display_description = description if description else "(No description generated)"
+            
+            # Format GitHub link
+            github_link = ""
+            if github_url:
+                github_link = f"\n**🐙 GitHub:** [View Repository]({github_url})"
+            elif github_status:
+                github_link = github_status
+            
+            content = f"""**Status:** ✅ COMPLETED SUCCESSFULLY
+**Project Name:** {display_name}
+**Description:** {display_description}
+**Model:** {model if model else 'default'}
+**Files:** {file_count} | **Dirs:** {dir_count}
+**User:** {interaction.user.mention}{github_link}"""
+        else:
+            # Show full message with all sections for debugging on failure
+            folder_section = _generate_folder_structure_section(project_path)
+            output_section = await _generate_copilot_output_section(output_buffer)
+            summary_section = _generate_summary_section(
+                interaction=interaction,
+                prompt=prompt,
+                model=model,
+                project_path=project_path,
+                timed_out=timed_out,
+                error_occurred=error_occurred,
+                error_message=error_message,
+                process=process,
+                github_status=github_status,
+                is_complete=True
+            )
+            
+            # Build final unified message (truncation handled inside)
+            content = _build_unified_message(folder_section, output_section, summary_section)
         
         try:
             await unified_msg.edit(content=content)
@@ -485,10 +517,15 @@ async def _handle_github_integration(
     error_occurred: bool,
     process: Optional[asyncio.subprocess.Process],
     session_log: SessionLogCollector
-) -> str:
-    """Handle GitHub integration and return status string."""
+) -> Tuple[str, bool, Optional[str], Optional[str]]:
+    """Handle GitHub integration and return status string.
+    
+    Returns:
+        Tuple of (github_status, github_success, repo_description, github_url)
+    """
     github_url = None
     github_status = ""
+    repo_description = None
     
     logger.info(f"GitHub check: enabled={GITHUB_ENABLED}, timed_out={timed_out}, error_occurred={error_occurred}, returncode={process.returncode if process else 'None'}")
     
@@ -498,7 +535,6 @@ async def _handle_github_integration(
             logger.info(f"Creating GitHub repository: {folder_name}")
             
             # Try to generate a description using Azure OpenAI
-            repo_description = None
             if naming_generator.is_configured():
                 repo_description = naming_generator.generate_description(prompt)
                 if repo_description:
@@ -535,7 +571,7 @@ async def _handle_github_integration(
     elif not GITHUB_ENABLED:
         logger.debug("GitHub integration is disabled")
     
-    return github_status, github_url is not None
+    return github_status, github_url is not None, repo_description, github_url
 
 
 def _handle_remove_readonly(func, path, exc_info):
@@ -747,7 +783,7 @@ def setup_createproject_command(bot) -> Callable:
                     pass
             
             # Handle GitHub integration
-            github_status, github_success = await _handle_github_integration(
+            github_status, github_success, repo_description, github_url = await _handle_github_integration(
                 project_path, folder_name, prompt, timed_out, error_occurred, process, session_log
             )
             
@@ -755,7 +791,10 @@ def setup_createproject_command(bot) -> Callable:
             await _update_final_message(
                 unified_msg, project_path, output_buffer, interaction,
                 prompt, model, timed_out, error_occurred, error_message,
-                process, github_status
+                process, github_status,
+                project_name=folder_name,
+                description=repo_description,
+                github_url=github_url
             )
             
             # Count files created (excluding ignored folders)

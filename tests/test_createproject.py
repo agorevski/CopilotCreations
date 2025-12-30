@@ -866,7 +866,7 @@ class TestHandleGithubIntegration:
         
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch('src.commands.createproject.GITHUB_ENABLED', False):
-                status, success = await _handle_github_integration(
+                status, success, description, github_url = await _handle_github_integration(
                     Path(tmpdir), "test_folder", "test prompt",
                     False, False, mock_process, session_log
                 )
@@ -885,7 +885,7 @@ class TestHandleGithubIntegration:
         
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch('src.commands.createproject.GITHUB_ENABLED', True):
-                status, success = await _handle_github_integration(
+                status, success, description, github_url = await _handle_github_integration(
                     Path(tmpdir), "test_folder", "test prompt",
                     True, False, mock_process, session_log  # timed_out=True
                 )
@@ -904,7 +904,7 @@ class TestHandleGithubIntegration:
         
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch('src.commands.createproject.GITHUB_ENABLED', True):
-                status, success = await _handle_github_integration(
+                status, success, description, github_url = await _handle_github_integration(
                     Path(tmpdir), "test_folder", "test prompt",
                     False, True, mock_process, session_log  # error_occurred=True
                 )
@@ -923,7 +923,7 @@ class TestHandleGithubIntegration:
         
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch('src.commands.createproject.GITHUB_ENABLED', True):
-                status, success = await _handle_github_integration(
+                status, success, description, github_url = await _handle_github_integration(
                     Path(tmpdir), "test_folder", "test prompt",
                     False, False, mock_process, session_log
                 )
@@ -945,7 +945,7 @@ class TestHandleGithubIntegration:
                 with patch('src.commands.createproject.github_manager') as mock_manager:
                     mock_manager.is_configured.return_value = False
                     
-                    status, success = await _handle_github_integration(
+                    status, success, description, github_url = await _handle_github_integration(
                         Path(tmpdir), "test_folder", "test prompt",
                         False, False, mock_process, session_log
                     )
@@ -970,7 +970,7 @@ class TestHandleGithubIntegration:
                         True, "Created successfully", "https://github.com/test/repo"
                     )
                     
-                    status, success = await _handle_github_integration(
+                    status, success, description, github_url = await _handle_github_integration(
                         Path(tmpdir), "test_folder", "test prompt",
                         False, False, mock_process, session_log
                     )
@@ -995,7 +995,7 @@ class TestHandleGithubIntegration:
                         False, "Failed to create", None
                     )
                     
-                    status, success = await _handle_github_integration(
+                    status, success, description, github_url = await _handle_github_integration(
                         Path(tmpdir), "test_folder", "test prompt",
                         False, False, mock_process, session_log
                     )
@@ -1497,7 +1497,7 @@ class TestGithubIntegrationEdgeCases:
         
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch('src.commands.createproject.GITHUB_ENABLED', True):
-                status, success = await _handle_github_integration(
+                status, success, description, github_url = await _handle_github_integration(
                     Path(tmpdir), "test_folder", "test prompt",
                     False, False, None, session_log  # process=None
                 )
