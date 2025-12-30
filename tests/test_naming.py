@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch, MagicMock
 
 import pytest
 
-from src.utils.naming import RepositoryNamingGenerator
+from src.utils.naming import RepositoryNamingGenerator, MAX_DESCRIPTION_LENGTH
 
 
 class TestRepositoryNamingGeneratorInit:
@@ -488,5 +488,49 @@ class TestSanitizeDescription:
             long_desc = "x" * 400
             result = generator._sanitize_description(long_desc)
             
-            assert len(result) <= generator.MAX_DESCRIPTION_LENGTH
+            assert len(result) <= MAX_DESCRIPTION_LENGTH
             assert result.endswith("...")
+
+
+class TestNamingConstants:
+    """Tests for naming module constants."""
+    
+    def test_max_repo_name_length_is_int(self):
+        """Test that MAX_REPO_NAME_LENGTH is the expected value."""
+        from src.utils.naming import MAX_REPO_NAME_LENGTH
+        assert isinstance(MAX_REPO_NAME_LENGTH, int)
+        assert MAX_REPO_NAME_LENGTH == 50
+    
+    def test_max_description_length_is_int(self):
+        """Test that MAX_DESCRIPTION_LENGTH is the expected value."""
+        assert isinstance(MAX_DESCRIPTION_LENGTH, int)
+        assert MAX_DESCRIPTION_LENGTH == 350
+
+
+class TestNamingGeneratorDependencyInjection:
+    """Tests for RepositoryNamingGenerator dependency injection support."""
+    
+    def test_init_with_custom_credentials(self):
+        """Test that RepositoryNamingGenerator accepts custom credentials."""
+        generator = RepositoryNamingGenerator(
+            endpoint="https://custom.openai.azure.com/",
+            api_key="custom_key",
+            deployment_name="custom-deploy",
+            api_version="2024-01-01"
+        )
+        
+        assert generator.endpoint == "https://custom.openai.azure.com/"
+        assert generator.api_key == "custom_key"
+        assert generator.deployment_name == "custom-deploy"
+        assert generator.api_version == "2024-01-01"
+    
+    def test_init_defaults_to_config(self):
+        """Test that RepositoryNamingGenerator defaults to config values."""
+        with patch('src.utils.naming.AZURE_OPENAI_ENDPOINT', 'https://default.openai.azure.com/'), \
+             patch('src.utils.naming.AZURE_OPENAI_API_KEY', 'default_key'), \
+             patch('src.utils.naming.AZURE_OPENAI_DEPLOYMENT_NAME', 'default-deploy'):
+            generator = RepositoryNamingGenerator()
+            
+            assert generator.endpoint == "https://default.openai.azure.com/"
+            assert generator.api_key == "default_key"
+            assert generator.deployment_name == "default-deploy"

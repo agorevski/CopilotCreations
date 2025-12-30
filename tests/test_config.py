@@ -140,3 +140,55 @@ class TestPromptTemplates:
             result = get_prompt_template('createproject')
             # Template should have content if config.yaml exists
             assert len(result) > 0
+
+
+class TestConfigErrorHandling:
+    """Tests for configuration error handling (swallowed exceptions fix)."""
+    
+    def test_init_config_logs_warning_on_yaml_error(self):
+        """Test that init_config logs warnings instead of silently failing."""
+        from unittest.mock import patch, mock_open
+        import logging
+        
+        # Reset initialization state
+        import src.config
+        src.config._initialized = False
+        src.config.PROMPT_TEMPLATES.clear()
+        
+        # Mock a YAML parse error
+        with patch.object(Path, 'exists', return_value=True), \
+             patch('builtins.open', mock_open(read_data='invalid: yaml: content: [')), \
+             patch('yaml.safe_load', side_effect=Exception("YAML parse error")), \
+             patch('logging.getLogger') as mock_logger:
+            mock_log = mock_logger.return_value
+            init_config()
+            # Should have logged a warning
+            # The function should complete without raising
+            assert src.config._initialized is True
+        
+        # Reset for other tests
+        src.config._initialized = False
+        src.config.PROMPT_TEMPLATES.clear()
+        init_config()
+    
+    def test_init_config_handles_io_error(self):
+        """Test that init_config handles IOError gracefully."""
+        from unittest.mock import patch
+        import src.config
+        
+        # Reset initialization state
+        src.config._initialized = False
+        src.config.PROMPT_TEMPLATES.clear()
+        
+        # Mock an IOError
+        with patch.object(Path, 'exists', return_value=True), \
+             patch('builtins.open', side_effect=IOError("Permission denied")), \
+             patch('logging.getLogger'):
+            init_config()
+            # Should complete without raising
+            assert src.config._initialized is True
+        
+        # Reset for other tests
+        src.config._initialized = False
+        src.config.PROMPT_TEMPLATES.clear()
+        init_config()

@@ -11,12 +11,17 @@ from typing import Set, Tuple
 logger = logging.getLogger("copilot_bot")
 
 
+# Constants for username sanitization
+MAX_USERNAME_LENGTH = 50
+DEFAULT_USERNAME = "unknown_user"
+
+
 def sanitize_username(username: str) -> str:
     """Sanitize username to be safe for folder paths."""
     sanitized = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', username)
     sanitized = sanitized.strip('. ')
-    sanitized = sanitized[:50]  # Limit length
-    return sanitized if sanitized else "unknown_user"
+    sanitized = sanitized[:MAX_USERNAME_LENGTH]
+    return sanitized if sanitized else DEFAULT_USERNAME
 
 
 def load_folderignore(base_path: Path) -> Set[str]:

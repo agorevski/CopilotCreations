@@ -221,7 +221,8 @@ async def update_unified_message(
                 except discord.errors.HTTPException as e:
                     # Discord interaction tokens expire after 15 minutes
                     # Re-fetch the message using channel and ID to bypass the expired token
-                    if e.code == 50027:  # Invalid Webhook Token
+                    from ..utils.github import DISCORD_INVALID_WEBHOOK_TOKEN
+                    if e.code == DISCORD_INVALID_WEBHOOK_TOKEN:
                         logger.info("Interaction token expired during updates, re-fetching message")
                         channel = interaction.channel
                         current_message = await channel.fetch_message(message.id)
@@ -250,7 +251,7 @@ async def read_stream(stream, output_buffer: AsyncOutputBuffer) -> None:
         await output_buffer.append(decoded)
 
 
-async def _create_project_directory(
+async def create_project_directory(
     username: str,
     session_log: SessionLogCollector,
     prompt: str = ""
@@ -296,7 +297,7 @@ async def _create_project_directory(
     return project_path, folder_name
 
 
-async def _send_initial_message(
+async def send_initial_message(
     interaction: discord.Interaction,
     project_path: Path,
     prompt: str,
@@ -330,7 +331,7 @@ User: {interaction.user.display_name}"""
     return unified_msg
 
 
-async def _run_copilot_process(
+async def run_copilot_process(
     project_path: Path,
     full_prompt: str,
     model: Optional[str],
@@ -427,7 +428,7 @@ async def _run_copilot_process(
     return timed_out, error_occurred, error_message, process
 
 
-async def _update_final_message(
+async def update_final_message(
     unified_msg: discord.Message,
     project_path: Path,
     output_buffer: AsyncOutputBuffer,
@@ -498,7 +499,8 @@ async def _update_final_message(
         except discord.errors.HTTPException as e:
             # Discord interaction tokens expire after 15 minutes
             # Re-fetch the message using channel and ID to bypass the expired token
-            if e.code == 50027:  # Invalid Webhook Token
+            from ..utils.github import DISCORD_INVALID_WEBHOOK_TOKEN
+            if e.code == DISCORD_INVALID_WEBHOOK_TOKEN:
                 logger.info("Interaction token expired, re-fetching message to edit")
                 channel = interaction.channel
                 fresh_msg = await channel.fetch_message(unified_msg.id)
@@ -509,7 +511,7 @@ async def _update_final_message(
         logger.warning(f"Error updating final unified message: {e}")
 
 
-async def _handle_github_integration(
+async def handle_github_integration(
     project_path: Path,
     folder_name: str,
     prompt: str,
@@ -590,7 +592,7 @@ def _handle_remove_readonly(func, path, exc_info):
         raise exc_info[1]
 
 
-def _cleanup_project_directory(
+def cleanup_project_directory(
     project_path: Path,
     session_log: SessionLogCollector
 ) -> bool:
@@ -739,7 +741,7 @@ def setup_createproject_command(bot) -> Callable:
             
             # Create project directory (uses Azure OpenAI for creative naming if configured)
             try:
-                project_path, folder_name = await _create_project_directory(username, session_log, prompt)
+                project_path, folder_name = await create_project_directory(username, session_log, prompt)
             except Exception as e:
                 session_log.error(f"Failed to create project directory: {e}")
                 await interaction.followup.send(format_error_message("Failed to create project directory", traceback.format_exc()))
@@ -747,7 +749,7 @@ def setup_createproject_command(bot) -> Callable:
             
             # Send initial unified message
             try:
-                unified_msg = await _send_initial_message(interaction, project_path, prompt, model)
+                unified_msg = await send_initial_message(interaction, project_path, prompt, model)
             except Exception as e:
                 session_log.error(f"Failed to send Discord message: {e}")
                 await interaction.followup.send(format_error_message("Failed to send message", traceback.format_exc()))
@@ -769,7 +771,7 @@ def setup_createproject_command(bot) -> Callable:
             
             try:
                 # Run the copilot process with full prompt (includes template)
-                timed_out, error_occurred, error_message, process = await _run_copilot_process(
+                timed_out, error_occurred, error_message, process = await run_copilot_process(
                     project_path, full_prompt, model, session_log, output_buffer, is_running, error_event
                 )
             finally:
@@ -783,12 +785,12 @@ def setup_createproject_command(bot) -> Callable:
                     pass
             
             # Handle GitHub integration
-            github_status, github_success, repo_description, github_url = await _handle_github_integration(
+            github_status, github_success, repo_description, github_url = await handle_github_integration(
                 project_path, folder_name, prompt, timed_out, error_occurred, process, session_log
             )
             
             # Final update to unified message with complete status
-            await _update_final_message(
+            await update_final_message(
                 unified_msg, project_path, output_buffer, interaction,
                 prompt, model, timed_out, error_occurred, error_message,
                 process, github_status,
@@ -809,7 +811,7 @@ def setup_createproject_command(bot) -> Callable:
             
             # Cleanup local project directory after successful GitHub push
             if CLEANUP_AFTER_PUSH and github_success:
-                _cleanup_project_directory(project_path, session_log)
+                cleanup_project_directory(project_path, session_log)
         finally:
             semaphore.release()
     

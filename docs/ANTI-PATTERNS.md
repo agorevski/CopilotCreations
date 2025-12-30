@@ -2,6 +2,8 @@
 
 This document catalogs engineering anti-patterns identified in the codebase, along with recommendations for remediation.
 
+**Last Updated:** 2025-12-30
+
 ---
 
 ## 1. Global Mutable State (Singletons)
@@ -106,116 +108,82 @@ Extract common project creation logic into a dedicated `ProjectCreationService` 
 
 ---
 
-## 5. Magic Numbers and Strings
+## 5. Hardcoded AI Model Parameters
 
-**Location:** Throughout the codebase, especially `src/config.py`
+**Location:** `src/utils/naming.py`, `src/utils/prompt_refinement.py`
 
 **Problem:**
-While many values are in `config.py`, magic numbers still appear inline:
-- `[:50]` for username length limit in multiple places
-- HTTP error codes like `50027` without named constants
-- Various string patterns hardcoded
+Azure OpenAI API parameters are hardcoded in multiple places:
+- `max_completion_tokens=50000` appears in 4 places
+- `temperature=0.7` and `temperature=0.3` hardcoded without constants
 
 **Example:**
 ```python
-# src/commands/createproject.py line 224
-if e.code == 50027:  # Invalid Webhook Token
-```
-
-```python
-# src/utils/folder_utils.py line 18
-sanitized = sanitized[:50]  # Limit length
+# src/utils/naming.py
+response = self.client.chat.completions.create(
+    model=self.deployment_name,
+    messages=messages,
+    max_completion_tokens=50000,  # Hardcoded
+    ...
+)
 ```
 
 **Recommendation:**
-Define named constants for all magic values:
+Define named constants in config.py:
 ```python
-DISCORD_INVALID_WEBHOOK_TOKEN = 50027
-MAX_USERNAME_LENGTH = 50
+MAX_COMPLETION_TOKENS = 50000
+REFINEMENT_TEMPERATURE = 0.7
+EXTRACTION_TEMPERATURE = 0.3
 ```
 
 ---
 
-## 6. Swallowed Exceptions
+## 6. Duplicate Imports
+
+**Location:** `src/commands/session_commands.py`, `src/config.py`
+
+**Problem:**
+Config imports are duplicated within the same file, and logging is imported multiple times inline in config.py.
+
+**Example:**
+```python
+# src/commands/session_commands.py
+from ..config import (MAX_PROMPT_LENGTH, ...)  # Line 21-26
+from ..config import (PROJECTS_DIR, ...)       # Line 45-53 (duplicated)
+
+# src/config.py - import logging called in 3 different exception blocks
+import logging
+logging.getLogger("copilot_bot").warning(...)
+```
+
+**Recommendation:**
+Consolidate imports at the top of each file. Move logging import to module level in config.py.
+
+---
+
+## 7. Missing Configuration Validation
 
 **Location:** `src/config.py`
 
 **Problem:**
-Exceptions are silently caught and ignored, hiding potential configuration errors.
+Environment variables are converted to integers without bounds checking, which could cause unexpected behavior:
 
 **Example:**
 ```python
-# src/config.py lines 59-64
-try:
-    with open(CONFIG_YAML_PATH, 'r', encoding='utf-8') as f:
-        PROMPT_TEMPLATES.update(yaml.safe_load(f) or {})
-except Exception:
-    pass  # Silently ignore config.yaml errors, use empty templates
+TIMEOUT_MINUTES = int(os.getenv("TIMEOUT_MINUTES", "30"))  # No bounds
+MAX_PARALLEL_REQUESTS = int(os.getenv("MAX_PARALLEL_REQUESTS", "2"))  # No min/max
 ```
 
 **Recommendation:**
-At minimum, log warnings when configuration fails to load. Consider failing fast for critical configuration or providing clear fallback behavior documentation.
-
----
-
-## 7. Tight Coupling to External Services
-
-**Location:** `src/utils/github.py`, `src/utils/naming.py`, `src/utils/prompt_refinement.py`
-
-**Problem:**
-Business logic is tightly coupled to specific external service implementations (GitHub API, Azure OpenAI). This makes:
-- Unit testing require mocking specific libraries
-- Switching providers difficult
-- Code harder to understand in isolation
-
-**Example:**
+Add validation with sensible bounds:
 ```python
-# src/utils/github.py directly uses PyGithub
-from github import Github, GithubException
-
-class GitHubManager:
-    def __init__(self):
-        self._github: Optional[Github] = None
-```
-
-**Recommendation:**
-Define abstract interfaces (protocols) for external services and inject implementations:
-```python
-class RepositoryService(Protocol):
-    def create_repository(self, name: str, description: str) -> RepositoryResult: ...
+TIMEOUT_MINUTES = max(1, min(120, int(os.getenv("TIMEOUT_MINUTES", "30"))))
+MAX_PARALLEL_REQUESTS = max(1, min(10, int(os.getenv("MAX_PARALLEL_REQUESTS", "2"))))
 ```
 
 ---
 
-## 8. Inconsistent Error Handling
-
-**Location:** Throughout the codebase
-
-**Problem:**
-Error handling patterns vary significantly:
-- Some functions return tuples `(success, message, url)`
-- Some raise exceptions
-- Some return `Optional` values
-- Some log and continue silently
-
-**Example:**
-```python
-# src/utils/github.py returns tuple
-def create_repository(...) -> Tuple[bool, str, Optional[str]]:
-
-# src/utils/naming.py returns Optional
-def generate_name(...) -> Optional[str]:
-```
-
-**Recommendation:**
-Adopt a consistent error handling strategy:
-- Use Result types or raise custom exceptions
-- Define clear error hierarchies
-- Document which approach each module uses
-
----
-
-## 9. Temporal Coupling
+## 8. Temporal Coupling
 
 **Location:** `src/config.py`, `run.py`
 
@@ -247,56 +215,7 @@ class Config:
 
 ---
 
-## 10. Leaky Abstractions
-
-**Location:** `src/commands/session_commands.py`
-
-**Problem:**
-The session commands module imports and directly uses internal functions from `createproject.py` that start with underscores (private convention):
-
-**Example:**
-```python
-# src/commands/session_commands.py lines 28-36
-from .createproject import (
-    _create_project_directory,
-    _send_initial_message,
-    _run_copilot_process,
-    _update_final_message,
-    _handle_github_integration,
-    _cleanup_project_directory,
-    update_unified_message,
-)
-```
-
-**Recommendation:**
-Either make these functions part of the public API (remove underscore prefix) or extract them into a shared module that both commands can use.
-
----
-
-## 11. Missing Type Hints
-
-**Location:** Various function signatures
-
-**Problem:**
-While most of the codebase uses type hints, some are incomplete or missing:
-
-**Example:**
-```python
-# src/commands/session_commands.py line 308
-async def _execute_project_creation(
-    interaction: discord.Interaction,
-    prompt: str,
-    model: Optional[str],
-    bot  # Missing type hint
-) -> None:
-```
-
-**Recommendation:**
-Add complete type hints to all function parameters and return values. Consider using `mypy` in strict mode in CI.
-
----
-
-## 12. Over-reliance on String Formatting for Messages
+## 9. Over-reliance on String Formatting for Messages
 
 **Location:** `src/commands/createproject.py`, `src/commands/session_commands.py`
 
@@ -322,7 +241,7 @@ Create message template classes or use a template engine. This enables:
 
 ---
 
-## 13. Subprocess Without Shell Escaping Validation
+## 10. Subprocess Without Shell Escaping Validation
 
 **Location:** `src/utils/github.py`
 
@@ -344,6 +263,64 @@ Add explicit validation for any values that come from external sources before pa
 
 ---
 
+## 11. Duplicated Azure OpenAI Call Pattern
+
+**Location:** `src/utils/naming.py`, `src/utils/prompt_refinement.py`
+
+**Problem:**
+The same pattern is repeated for every Azure OpenAI API call:
+- Create messages array
+- Call Azure OpenAI
+- Log response
+- Check for empty/null response
+- Sanitize output
+
+**Recommendation:**
+Extract into a common helper method:
+```python
+async def _call_azure_openai(
+    self,
+    messages: List[Dict[str, str]],
+    temperature: float = 0.7
+) -> Optional[str]:
+    """Common wrapper for Azure OpenAI API calls with logging and error handling."""
+    ...
+```
+
+---
+
+## 12. Magic Numbers in Text Splitting
+
+**Location:** `src/utils/text_utils.py`
+
+**Problem:**
+Algorithm-specific magic numbers without explanation:
+
+**Example:**
+```python
+if break_point > max_length // 2:  # Why 50%?
+```
+
+**Recommendation:**
+Extract to named constant:
+```python
+MIN_BREAK_POINT_RATIO = 0.5  # Minimum ratio of content to preserve when splitting
+```
+
+---
+
+## 13. Missing Repository Name Validation
+
+**Location:** `src/utils/github.py`
+
+**Problem:**
+Repository names are only validated after Azure OpenAI generation in naming.py, but not validated at the point of use in github.py.
+
+**Recommendation:**
+Add early validation in `create_repository()` to fail fast with a clear error message.
+
+---
+
 ## Summary
 
 | Priority | Anti-Pattern | Impact | Effort to Fix |
@@ -352,29 +329,48 @@ Add explicit validation for any values that come from external sources before pa
 | High | Duplicated Code | Maintainability | Low |
 | High | God Function | Maintainability | Medium |
 | Medium | Mixed Sync/Async | Performance, Bugs | Medium |
-| Medium | Swallowed Exceptions | Debugging | Low |
-| Medium | Tight Coupling | Testing, Flexibility | High |
-| Medium | Inconsistent Error Handling | Reliability | Medium |
-| Low | Magic Numbers | Readability | Low |
-| Low | Leaky Abstractions | API Design | Low |
-| Low | Missing Type Hints | Type Safety | Low |
+| Medium | Missing Config Validation | Reliability | Low |
+| Medium | Hardcoded AI Parameters | Flexibility | Low |
+| Medium | Duplicate Imports | Code Quality | Low |
+| Low | Temporal Coupling | Usability | Medium |
+| Low | String Message Templates | Maintainability | Medium |
+| Low | Subprocess Validation | Security | Low |
 
 ---
 
 ## Remediation Priority
 
 1. **Phase 1 (Quick Wins):**
-   - Add named constants for magic numbers
-   - Log swallowed exceptions
-   - Add missing type hints
-   - Make underscore-prefixed functions public or refactor
+   - Consolidate duplicate imports
+   - Add config validation (min/max bounds)
+   - Extract AI parameters to constants
+   - Add magic number constants for text splitting
 
 2. **Phase 2 (Code Quality):**
    - Extract duplicated code to shared services
    - Break up god functions
-   - Standardize error handling
+   - Create Azure OpenAI helper method
 
 3. **Phase 3 (Architecture):**
-   - Introduce dependency injection
-   - Create service interfaces for external dependencies
+   - Introduce full dependency injection
+   - Create message template system
    - Convert to async-first where appropriate
+   - Add repository name validation
+
+---
+
+## Recently Fixed (2025-12-30)
+
+The following anti-patterns were addressed:
+
+1. ✅ **Magic Numbers** - Added named constants (`MAX_USERNAME_LENGTH`, `DISCORD_INVALID_WEBHOOK_TOKEN`, `MAX_DESCRIPTION_LENGTH`, `GIT_OPERATION_TIMEOUT`, etc.)
+
+2. ✅ **Swallowed Exceptions** - Config.py now logs specific warnings for YAML parse errors, IO errors, and unexpected exceptions
+
+3. ✅ **Tight Coupling** - Added `RepositoryService` and `NamingService` Protocol interfaces for dependency injection
+
+4. ✅ **Leaky Abstractions** - Made private functions public by removing underscore prefixes (`create_project_directory`, `send_initial_message`, etc.)
+
+5. ✅ **Missing Type Hints** - Added type hints for `bot` parameter in session_commands.py functions
+
+6. ✅ **Inconsistent Error Handling** - Improved with named constants for error codes

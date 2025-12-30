@@ -11,7 +11,7 @@ This module provides functionality to:
 import subprocess
 import shutil
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Protocol
 
 from github import Github, GithubException
 
@@ -24,17 +24,65 @@ from ..config import (
 from .logging import logger
 
 
+# Discord error codes
+DISCORD_INVALID_WEBHOOK_TOKEN = 50027
+
+# GitHub constraints
+MAX_DESCRIPTION_LENGTH = 350
+
+# Git operation timeout in seconds
+GIT_OPERATION_TIMEOUT = 60
+
+
+class RepositoryService(Protocol):
+    """Protocol for repository services (enables dependency injection)."""
+    
+    def is_configured(self) -> bool:
+        """Check if the repository service is properly configured."""
+        ...
+    
+    def create_repository(
+        self,
+        repo_name: str,
+        description: str = "",
+        private: bool = False
+    ) -> Tuple[bool, str, Optional[str]]:
+        """Create a new repository."""
+        ...
+    
+    def create_and_push_project(
+        self,
+        project_path: Path,
+        repo_name: str,
+        description: str = "",
+        private: bool = False
+    ) -> Tuple[bool, str, Optional[str]]:
+        """Create a repository and push project files."""
+        ...
+
+
 class GitHubManager:
     """Manages GitHub repository operations."""
     
-    # GitHub's maximum description length
-    MAX_DESCRIPTION_LENGTH = 350
-    
-    def __init__(self):
-        """Initialize the GitHub manager with credentials from config."""
-        self.enabled = GITHUB_ENABLED
-        self.token = GITHUB_TOKEN
-        self.username = GITHUB_USERNAME
+    def __init__(
+        self,
+        token: Optional[str] = None,
+        username: Optional[str] = None,
+        enabled: Optional[bool] = None,
+        base_dir: Optional[Path] = None
+    ):
+        """Initialize the GitHub manager with credentials.
+        
+        Args:
+            token: GitHub personal access token. Defaults to config value.
+            username: GitHub username. Defaults to config value.
+            enabled: Whether GitHub integration is enabled. Defaults to config value.
+            base_dir: Base directory for .gitignore. Defaults to config value.
+        """
+        self.enabled = enabled if enabled is not None else GITHUB_ENABLED
+        self.token = token or GITHUB_TOKEN
+        self.username = username or GITHUB_USERNAME
+        self._base_dir = base_dir or BASE_DIR
         self._github: Optional[Github] = None
     
     @property
@@ -77,9 +125,9 @@ class GitHubManager:
             if 32 <= ord(char) < 127
         )
         
-        # Truncate to GitHub's max length (350 chars)
-        if len(description) > self.MAX_DESCRIPTION_LENGTH:
-            description = description[:self.MAX_DESCRIPTION_LENGTH - 3].rstrip() + '...'
+        # Truncate to GitHub's max length
+        if len(description) > MAX_DESCRIPTION_LENGTH:
+            description = description[:MAX_DESCRIPTION_LENGTH - 3].rstrip() + '...'
         
         return description
     
@@ -93,7 +141,7 @@ class GitHubManager:
         Returns:
             True if successful, False otherwise
         """
-        source_gitignore = BASE_DIR / ".gitignore"
+        source_gitignore = self._base_dir / ".gitignore"
         dest_gitignore = project_path / ".gitignore"
         
         try:
@@ -243,7 +291,7 @@ class GitHubManager:
                     cwd=str(project_path),
                     capture_output=True,
                     text=True,
-                    timeout=60
+                    timeout=GIT_OPERATION_TIMEOUT
                 )
                 
                 if result.returncode != 0:
@@ -262,8 +310,8 @@ class GitHubManager:
             return True, f"Pushed to GitHub: {public_url}"
             
         except subprocess.TimeoutExpired as e:
-            logger.error(f"Git operation timed out after 60 seconds: {e}")
-            error_msg = "Git operation timed out after 60 seconds"
+            logger.error(f"Git operation timed out after {GIT_OPERATION_TIMEOUT} seconds: {e}")
+            error_msg = f"Git operation timed out after {GIT_OPERATION_TIMEOUT} seconds"
             return False, error_msg
         except Exception as e:
             import traceback

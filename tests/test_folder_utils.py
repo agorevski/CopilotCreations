@@ -13,7 +13,9 @@ from src.utils.folder_utils import (
     count_files_recursive,
     count_files_excluding_ignored,
     get_folder_tree,
-    load_folderignore
+    load_folderignore,
+    MAX_USERNAME_LENGTH,
+    DEFAULT_USERNAME
 )
 
 
@@ -75,7 +77,31 @@ class TestSanitizeUsername:
         assert not result.endswith(" ")
 
 
-class TestLoadFolderignore:
+class TestUsernameConstants:
+    """Tests for username-related constants."""
+    
+    def test_max_username_length_is_positive(self):
+        """Test that MAX_USERNAME_LENGTH is a positive integer."""
+        assert isinstance(MAX_USERNAME_LENGTH, int)
+        assert MAX_USERNAME_LENGTH > 0
+        assert MAX_USERNAME_LENGTH == 50
+    
+    def test_default_username_is_string(self):
+        """Test that DEFAULT_USERNAME is a non-empty string."""
+        assert isinstance(DEFAULT_USERNAME, str)
+        assert len(DEFAULT_USERNAME) > 0
+        assert DEFAULT_USERNAME == "unknown_user"
+    
+    def test_sanitize_respects_max_length(self):
+        """Test that sanitize_username respects MAX_USERNAME_LENGTH."""
+        long_name = "a" * (MAX_USERNAME_LENGTH + 50)
+        result = sanitize_username(long_name)
+        assert len(result) <= MAX_USERNAME_LENGTH
+    
+    def test_sanitize_returns_default_for_empty(self):
+        """Test that sanitize_username returns DEFAULT_USERNAME for empty input."""
+        result = sanitize_username("")
+        assert result == DEFAULT_USERNAME
     """Tests for load_folderignore function."""
     
     def test_loads_from_directory(self):

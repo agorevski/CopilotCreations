@@ -594,11 +594,11 @@ class TestExecuteProjectCreation:
         
         mock_bot = MagicMock()
         
-        with patch('src.commands.session_commands._create_project_directory') as mock_create:
-            with patch('src.commands.session_commands._send_initial_message') as mock_send:
-                with patch('src.commands.session_commands._run_copilot_process') as mock_run:
-                    with patch('src.commands.session_commands._handle_github_integration') as mock_github:
-                        with patch('src.commands.session_commands._update_final_message'):
+        with patch('src.commands.session_commands.create_project_directory') as mock_create:
+            with patch('src.commands.session_commands.send_initial_message') as mock_send:
+                with patch('src.commands.session_commands.run_copilot_process') as mock_run:
+                    with patch('src.commands.session_commands.handle_github_integration') as mock_github:
+                        with patch('src.commands.session_commands.update_final_message'):
                             with patch('src.commands.session_commands.CLEANUP_AFTER_PUSH', False):
                                 with tempfile.TemporaryDirectory() as tmpdir:
                                     mock_create.return_value = (Path(tmpdir), "test_folder")
@@ -621,7 +621,7 @@ class TestExecuteProjectCreation:
         
         mock_bot = MagicMock()
         
-        with patch('src.commands.session_commands._create_project_directory') as mock_create:
+        with patch('src.commands.session_commands.create_project_directory') as mock_create:
             mock_create.side_effect = OSError("Failed to create directory")
             
             await _execute_project_creation(
@@ -637,8 +637,8 @@ class TestExecuteProjectCreation:
         
         mock_bot = MagicMock()
         
-        with patch('src.commands.session_commands._create_project_directory') as mock_create:
-            with patch('src.commands.session_commands._send_initial_message') as mock_send:
+        with patch('src.commands.session_commands.create_project_directory') as mock_create:
+            with patch('src.commands.session_commands.send_initial_message') as mock_send:
                 with tempfile.TemporaryDirectory() as tmpdir:
                     mock_create.return_value = (Path(tmpdir), "test_folder")
                     mock_send.side_effect = Exception("Failed to send message")
@@ -656,12 +656,12 @@ class TestExecuteProjectCreation:
         
         mock_bot = MagicMock()
         
-        with patch('src.commands.session_commands._create_project_directory') as mock_create:
-            with patch('src.commands.session_commands._send_initial_message') as mock_send:
-                with patch('src.commands.session_commands._run_copilot_process') as mock_run:
-                    with patch('src.commands.session_commands._handle_github_integration') as mock_github:
-                        with patch('src.commands.session_commands._update_final_message'):
-                            with patch('src.commands.session_commands._cleanup_project_directory') as mock_cleanup:
+        with patch('src.commands.session_commands.create_project_directory') as mock_create:
+            with patch('src.commands.session_commands.send_initial_message') as mock_send:
+                with patch('src.commands.session_commands.run_copilot_process') as mock_run:
+                    with patch('src.commands.session_commands.handle_github_integration') as mock_github:
+                        with patch('src.commands.session_commands.update_final_message'):
+                            with patch('src.commands.session_commands.cleanup_project_directory') as mock_cleanup:
                                 with patch('src.commands.session_commands.CLEANUP_AFTER_PUSH', True):
                                     with tempfile.TemporaryDirectory() as tmpdir:
                                         mock_create.return_value = (Path(tmpdir), "test_folder")

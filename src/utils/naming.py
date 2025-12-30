@@ -6,7 +6,7 @@ repository names based on project descriptions using Azure OpenAI GPT models.
 """
 
 import re
-from typing import Optional
+from typing import Optional, Protocol
 
 from openai import AzureOpenAI
 
@@ -20,15 +20,49 @@ from ..config import (
 from .logging import logger
 
 
+# Constants
+MAX_REPO_NAME_LENGTH = 50
+MAX_DESCRIPTION_LENGTH = 350
+
+
+class NamingService(Protocol):
+    """Protocol for repository naming services (enables dependency injection)."""
+    
+    def is_configured(self) -> bool:
+        """Check if the naming service is properly configured."""
+        ...
+    
+    def generate_name(self, project_description: str) -> Optional[str]:
+        """Generate a creative repository name based on the project description."""
+        ...
+    
+    def generate_description(self, project_description: str) -> Optional[str]:
+        """Generate a repository description based on the project description."""
+        ...
+
+
 class RepositoryNamingGenerator:
     """Generates creative repository names using Azure OpenAI."""
     
-    def __init__(self):
-        """Initialize the naming generator with Azure OpenAI credentials."""
-        self.endpoint = AZURE_OPENAI_ENDPOINT
-        self.api_key = AZURE_OPENAI_API_KEY
-        self.deployment_name = AZURE_OPENAI_DEPLOYMENT_NAME
-        self.api_version = AZURE_OPENAI_API_VERSION
+    def __init__(
+        self,
+        endpoint: Optional[str] = None,
+        api_key: Optional[str] = None,
+        deployment_name: Optional[str] = None,
+        api_version: Optional[str] = None
+    ):
+        """Initialize the naming generator with Azure OpenAI credentials.
+        
+        Args:
+            endpoint: Azure OpenAI endpoint URL. Defaults to config value.
+            api_key: Azure OpenAI API key. Defaults to config value.
+            deployment_name: Azure OpenAI deployment name. Defaults to config value.
+            api_version: Azure OpenAI API version. Defaults to config value.
+        """
+        self.endpoint = endpoint or AZURE_OPENAI_ENDPOINT
+        self.api_key = api_key or AZURE_OPENAI_API_KEY
+        self.deployment_name = deployment_name or AZURE_OPENAI_DEPLOYMENT_NAME
+        self.api_version = api_version or AZURE_OPENAI_API_VERSION
         self._client: Optional[AzureOpenAI] = None
     
     @property
@@ -45,9 +79,6 @@ class RepositoryNamingGenerator:
     def is_configured(self) -> bool:
         """Check if Azure OpenAI integration is properly configured."""
         return bool(self.endpoint and self.api_key and self.deployment_name)
-    
-    # GitHub's maximum description length
-    MAX_DESCRIPTION_LENGTH = 350
     
     def _sanitize_name(self, name: str) -> str:
         """Sanitize the generated name to be a valid repository name.
@@ -76,9 +107,9 @@ class RepositoryNamingGenerator:
         # Remove leading/trailing hyphens
         name = name.strip('-')
         
-        # Limit length to 50 characters
-        if len(name) > 50:
-            name = name[:50].rstrip('-')
+        # Limit length to MAX_REPO_NAME_LENGTH characters
+        if len(name) > MAX_REPO_NAME_LENGTH:
+            name = name[:MAX_REPO_NAME_LENGTH].rstrip('-')
         
         return name
     
@@ -107,9 +138,9 @@ class RepositoryNamingGenerator:
             if ord(char) < 128 or char.isalnum() or char.isspace()
         )
         
-        # Truncate to GitHub's max length (350 chars)
-        if len(description) > self.MAX_DESCRIPTION_LENGTH:
-            description = description[:self.MAX_DESCRIPTION_LENGTH - 3].rstrip() + '...'
+        # Truncate to GitHub's max length
+        if len(description) > MAX_DESCRIPTION_LENGTH:
+            description = description[:MAX_DESCRIPTION_LENGTH - 3].rstrip() + '...'
         
         return description
     

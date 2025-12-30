@@ -18,13 +18,13 @@ from src.commands.createproject import (
     _build_unified_message,
     read_stream,
     setup_createproject_command,
-    _create_project_directory,
-    _send_initial_message,
-    _run_copilot_process,
-    _update_final_message,
+    create_project_directory,
+    send_initial_message,
+    run_copilot_process,
+    update_final_message,
     _send_log_file,
     _handle_remove_readonly,
-    _cleanup_project_directory
+    cleanup_project_directory
 )
 from src.config import MAX_MESSAGE_LENGTH, PROJECTS_DIR, MAX_FOLDER_STRUCTURE_LENGTH, MAX_COPILOT_OUTPUT_LENGTH
 from src.utils.async_buffer import AsyncOutputBuffer
@@ -479,10 +479,10 @@ class TestCreateprojectCommandHandler:
 
 
 class TestRunCopilotProcess:
-    """Tests for _run_copilot_process function."""
+    """Tests for run_copilot_process function."""
     
     @pytest.mark.asyncio
-    async def test_run_copilot_process_success(self):
+    async def testrun_copilot_process_success(self):
         """Test successful copilot process execution."""
         with tempfile.TemporaryDirectory() as tmpdir:
             project_path = Path(tmpdir)
@@ -510,7 +510,7 @@ class TestRunCopilotProcess:
                     
                     with patch('src.commands.createproject.TIMEOUT_SECONDS', 1):
                         with patch('src.commands.createproject.PROGRESS_LOG_INTERVAL_SECONDS', 100):
-                            timed_out, error_occurred, error_message, process = await _run_copilot_process(
+                            timed_out, error_occurred, error_message, process = await run_copilot_process(
                                 project_path, "test prompt", None, session_log,
                                 output_buffer, is_running, error_event
                             )
@@ -524,7 +524,7 @@ class TestRunCopilotProcess:
                 assert process is not None
     
     @pytest.mark.asyncio
-    async def test_run_copilot_process_with_model(self):
+    async def testrun_copilot_process_with_model(self):
         """Test copilot process execution with model specified."""
         with tempfile.TemporaryDirectory() as tmpdir:
             project_path = Path(tmpdir)
@@ -551,7 +551,7 @@ class TestRunCopilotProcess:
                     
                     with patch('src.commands.createproject.TIMEOUT_SECONDS', 1):
                         with patch('src.commands.createproject.PROGRESS_LOG_INTERVAL_SECONDS', 100):
-                            await _run_copilot_process(
+                            await run_copilot_process(
                                 project_path, "test prompt", "gpt-4", session_log,
                                 output_buffer, is_running, error_event
                             )
@@ -562,7 +562,7 @@ class TestRunCopilotProcess:
                 assert "gpt-4" in call_args
     
     @pytest.mark.asyncio
-    async def test_run_copilot_process_timeout(self):
+    async def testrun_copilot_process_timeout(self):
         """Test copilot process timeout handling."""
         with tempfile.TemporaryDirectory() as tmpdir:
             project_path = Path(tmpdir)
@@ -590,7 +590,7 @@ class TestRunCopilotProcess:
                     
                     with patch('src.commands.createproject.TIMEOUT_SECONDS', 0.01):
                         with patch('src.commands.createproject.PROGRESS_LOG_INTERVAL_SECONDS', 100):
-                            timed_out, error_occurred, error_message, process = await _run_copilot_process(
+                            timed_out, error_occurred, error_message, process = await run_copilot_process(
                                 project_path, "test prompt", None, session_log,
                                 output_buffer, is_running, error_event
                             )
@@ -603,7 +603,7 @@ class TestRunCopilotProcess:
                 mock_process.kill.assert_called_once()
     
     @pytest.mark.asyncio
-    async def test_run_copilot_process_exception(self):
+    async def testrun_copilot_process_exception(self):
         """Test copilot process exception handling."""
         with tempfile.TemporaryDirectory() as tmpdir:
             project_path = Path(tmpdir)
@@ -616,7 +616,7 @@ class TestRunCopilotProcess:
             with patch('asyncio.create_subprocess_exec', new_callable=AsyncMock) as mock_exec:
                 mock_exec.side_effect = OSError("Command not found")
                 
-                timed_out, error_occurred, error_message, process = await _run_copilot_process(
+                timed_out, error_occurred, error_message, process = await run_copilot_process(
                     project_path, "test prompt", None, session_log,
                     output_buffer, is_running, error_event
                 )
@@ -712,20 +712,20 @@ class TestHelperFunctions:
     """Tests for extracted helper functions."""
     
     @pytest.mark.asyncio
-    async def test_create_project_directory(self):
-        """Test that _create_project_directory creates a directory."""
+    async def testcreate_project_directory(self):
+        """Test that create_project_directory creates a directory."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch('src.commands.createproject.PROJECTS_DIR', Path(tmpdir)):
                 session_log = SessionLogCollector("test_session")
                 
-                project_path, folder_name = await _create_project_directory("testuser", session_log)
+                project_path, folder_name = await create_project_directory("testuser", session_log)
                 
                 assert project_path.exists()
                 assert "testuser" in folder_name
     
     @pytest.mark.asyncio
-    async def test_send_initial_message(self):
-        """Test that _send_initial_message sends a unified message."""
+    async def testsend_initial_message(self):
+        """Test that send_initial_message sends a unified message."""
         mock_interaction = AsyncMock()
         mock_unified_msg = AsyncMock()
         mock_interaction.user = MagicMock()
@@ -736,7 +736,7 @@ class TestHelperFunctions:
         with tempfile.TemporaryDirectory() as tmpdir:
             project_path = Path(tmpdir)
             
-            unified_msg = await _send_initial_message(
+            unified_msg = await send_initial_message(
                 mock_interaction, project_path, "test prompt", None
             )
             
@@ -744,8 +744,8 @@ class TestHelperFunctions:
             assert unified_msg == mock_unified_msg
     
     @pytest.mark.asyncio
-    async def test_send_initial_message_with_model(self):
-        """Test that _send_initial_message includes model info."""
+    async def testsend_initial_message_with_model(self):
+        """Test that send_initial_message includes model info."""
         mock_interaction = AsyncMock()
         mock_unified_msg = AsyncMock()
         mock_interaction.user = MagicMock()
@@ -756,7 +756,7 @@ class TestHelperFunctions:
         with tempfile.TemporaryDirectory() as tmpdir:
             project_path = Path(tmpdir)
             
-            await _send_initial_message(mock_interaction, project_path, "test prompt", "gpt-4")
+            await send_initial_message(mock_interaction, project_path, "test prompt", "gpt-4")
             
             # Check that model was included in message
             call_args = str(mock_interaction.followup.send.call_args)
@@ -764,7 +764,7 @@ class TestHelperFunctions:
 
 
 class TestUpdateFinalMessage:
-    """Tests for _update_final_message function."""
+    """Tests for update_final_message function."""
     
     @pytest.fixture
     def mock_interaction(self):
@@ -775,8 +775,8 @@ class TestUpdateFinalMessage:
         return interaction
     
     @pytest.mark.asyncio
-    async def test_update_final_message_success(self, mock_interaction):
-        """Test that _update_final_message updates the unified message."""
+    async def testupdate_final_message_success(self, mock_interaction):
+        """Test that update_final_message updates the unified message."""
         mock_unified_msg = AsyncMock()
         output_buffer = AsyncOutputBuffer()
         await output_buffer.append("Test output")
@@ -787,7 +787,7 @@ class TestUpdateFinalMessage:
             tmppath = Path(tmpdir)
             (tmppath / "test.txt").touch()
             
-            await _update_final_message(
+            await update_final_message(
                 mock_unified_msg, tmppath, output_buffer, mock_interaction,
                 "test prompt", None, False, False, "", mock_process, ""
             )
@@ -795,8 +795,8 @@ class TestUpdateFinalMessage:
             assert mock_unified_msg.edit.called
     
     @pytest.mark.asyncio
-    async def test_update_final_message_with_model(self, mock_interaction):
-        """Test that _update_final_message includes model info."""
+    async def testupdate_final_message_with_model(self, mock_interaction):
+        """Test that update_final_message includes model info."""
         mock_unified_msg = AsyncMock()
         output_buffer = AsyncOutputBuffer()
         await output_buffer.append("Test output")
@@ -806,7 +806,7 @@ class TestUpdateFinalMessage:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             
-            await _update_final_message(
+            await update_final_message(
                 mock_unified_msg, tmppath, output_buffer, mock_interaction,
                 "test prompt", "claude-3", False, False, "", mock_process, ""
             )
@@ -815,8 +815,8 @@ class TestUpdateFinalMessage:
             assert "claude-3" in call_args
     
     @pytest.mark.asyncio
-    async def test_update_final_message_handles_exception(self, mock_interaction):
-        """Test that _update_final_message handles exceptions gracefully."""
+    async def testupdate_final_message_handles_exception(self, mock_interaction):
+        """Test that update_final_message handles exceptions gracefully."""
         mock_unified_msg = AsyncMock()
         mock_unified_msg.edit.side_effect = RuntimeError("Test error")
         output_buffer = AsyncOutputBuffer()
@@ -825,14 +825,14 @@ class TestUpdateFinalMessage:
             tmppath = Path(tmpdir)
             
             # Should not raise exception
-            await _update_final_message(
+            await update_final_message(
                 mock_unified_msg, tmppath, output_buffer, mock_interaction,
                 "test prompt", None, False, False, "", None, ""
             )
     
     @pytest.mark.asyncio
-    async def test_update_final_message_truncates_long_content(self, mock_interaction):
-        """Test that _update_final_message truncates long output."""
+    async def testupdate_final_message_truncates_long_content(self, mock_interaction):
+        """Test that update_final_message truncates long output."""
         mock_unified_msg = AsyncMock()
         output_buffer = AsyncOutputBuffer()
         await output_buffer.append("x" * 10000)  # Very long output
@@ -840,7 +840,7 @@ class TestUpdateFinalMessage:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             
-            await _update_final_message(
+            await update_final_message(
                 mock_unified_msg, tmppath, output_buffer, mock_interaction,
                 "test prompt", None, False, False, "", None, ""
             )
@@ -853,12 +853,12 @@ class TestUpdateFinalMessage:
 
 
 class TestHandleGithubIntegration:
-    """Tests for _handle_github_integration function."""
+    """Tests for handle_github_integration function."""
     
     @pytest.mark.asyncio
     async def test_github_disabled(self):
         """Test GitHub integration when disabled."""
-        from src.commands.createproject import _handle_github_integration
+        from src.commands.createproject import handle_github_integration
         
         mock_process = MagicMock()
         mock_process.returncode = 0
@@ -866,7 +866,7 @@ class TestHandleGithubIntegration:
         
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch('src.commands.createproject.GITHUB_ENABLED', False):
-                status, success, description, github_url = await _handle_github_integration(
+                status, success, description, github_url = await handle_github_integration(
                     Path(tmpdir), "test_folder", "test prompt",
                     False, False, mock_process, session_log
                 )
@@ -877,7 +877,7 @@ class TestHandleGithubIntegration:
     @pytest.mark.asyncio
     async def test_github_skipped_on_timeout(self):
         """Test GitHub skipped when process timed out."""
-        from src.commands.createproject import _handle_github_integration
+        from src.commands.createproject import handle_github_integration
         
         mock_process = MagicMock()
         mock_process.returncode = 0
@@ -885,7 +885,7 @@ class TestHandleGithubIntegration:
         
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch('src.commands.createproject.GITHUB_ENABLED', True):
-                status, success, description, github_url = await _handle_github_integration(
+                status, success, description, github_url = await handle_github_integration(
                     Path(tmpdir), "test_folder", "test prompt",
                     True, False, mock_process, session_log  # timed_out=True
                 )
@@ -896,7 +896,7 @@ class TestHandleGithubIntegration:
     @pytest.mark.asyncio
     async def test_github_skipped_on_error(self):
         """Test GitHub skipped when error occurred."""
-        from src.commands.createproject import _handle_github_integration
+        from src.commands.createproject import handle_github_integration
         
         mock_process = MagicMock()
         mock_process.returncode = 0
@@ -904,7 +904,7 @@ class TestHandleGithubIntegration:
         
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch('src.commands.createproject.GITHUB_ENABLED', True):
-                status, success, description, github_url = await _handle_github_integration(
+                status, success, description, github_url = await handle_github_integration(
                     Path(tmpdir), "test_folder", "test prompt",
                     False, True, mock_process, session_log  # error_occurred=True
                 )
@@ -915,7 +915,7 @@ class TestHandleGithubIntegration:
     @pytest.mark.asyncio
     async def test_github_skipped_on_nonzero_exit(self):
         """Test GitHub skipped when process exit code is non-zero."""
-        from src.commands.createproject import _handle_github_integration
+        from src.commands.createproject import handle_github_integration
         
         mock_process = MagicMock()
         mock_process.returncode = 1  # Non-zero exit
@@ -923,7 +923,7 @@ class TestHandleGithubIntegration:
         
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch('src.commands.createproject.GITHUB_ENABLED', True):
-                status, success, description, github_url = await _handle_github_integration(
+                status, success, description, github_url = await handle_github_integration(
                     Path(tmpdir), "test_folder", "test prompt",
                     False, False, mock_process, session_log
                 )
@@ -934,7 +934,7 @@ class TestHandleGithubIntegration:
     @pytest.mark.asyncio
     async def test_github_not_configured(self):
         """Test GitHub when enabled but not configured."""
-        from src.commands.createproject import _handle_github_integration
+        from src.commands.createproject import handle_github_integration
         
         mock_process = MagicMock()
         mock_process.returncode = 0
@@ -945,7 +945,7 @@ class TestHandleGithubIntegration:
                 with patch('src.commands.createproject.github_manager') as mock_manager:
                     mock_manager.is_configured.return_value = False
                     
-                    status, success, description, github_url = await _handle_github_integration(
+                    status, success, description, github_url = await handle_github_integration(
                         Path(tmpdir), "test_folder", "test prompt",
                         False, False, mock_process, session_log
                     )
@@ -956,7 +956,7 @@ class TestHandleGithubIntegration:
     @pytest.mark.asyncio
     async def test_github_success(self):
         """Test GitHub integration success."""
-        from src.commands.createproject import _handle_github_integration
+        from src.commands.createproject import handle_github_integration
         
         mock_process = MagicMock()
         mock_process.returncode = 0
@@ -970,7 +970,7 @@ class TestHandleGithubIntegration:
                         True, "Created successfully", "https://github.com/test/repo"
                     )
                     
-                    status, success, description, github_url = await _handle_github_integration(
+                    status, success, description, github_url = await handle_github_integration(
                         Path(tmpdir), "test_folder", "test prompt",
                         False, False, mock_process, session_log
                     )
@@ -981,7 +981,7 @@ class TestHandleGithubIntegration:
     @pytest.mark.asyncio
     async def test_github_failure(self):
         """Test GitHub integration failure."""
-        from src.commands.createproject import _handle_github_integration
+        from src.commands.createproject import handle_github_integration
         
         mock_process = MagicMock()
         mock_process.returncode = 0
@@ -995,7 +995,7 @@ class TestHandleGithubIntegration:
                         False, "Failed to create", None
                     )
                     
-                    status, success, description, github_url = await _handle_github_integration(
+                    status, success, description, github_url = await handle_github_integration(
                         Path(tmpdir), "test_folder", "test prompt",
                         False, False, mock_process, session_log
                     )
@@ -1005,11 +1005,11 @@ class TestHandleGithubIntegration:
 
 
 class TestCleanupProjectDirectory:
-    """Tests for _cleanup_project_directory function."""
+    """Tests for cleanup_project_directory function."""
     
     def test_cleanup_success(self):
         """Test successful cleanup of project directory."""
-        from src.commands.createproject import _cleanup_project_directory
+        from src.commands.createproject import cleanup_project_directory
         
         session_log = SessionLogCollector("test")
         
@@ -1018,25 +1018,25 @@ class TestCleanupProjectDirectory:
             project_path.mkdir()
             (project_path / "test.txt").touch()
             
-            result = _cleanup_project_directory(project_path, session_log)
+            result = cleanup_project_directory(project_path, session_log)
             
             assert result is True
             assert not project_path.exists()
     
     def test_cleanup_nonexistent_directory(self):
         """Test cleanup of non-existent directory."""
-        from src.commands.createproject import _cleanup_project_directory
+        from src.commands.createproject import cleanup_project_directory
         
         session_log = SessionLogCollector("test")
         project_path = Path("/nonexistent/path/that/does/not/exist")
         
-        result = _cleanup_project_directory(project_path, session_log)
+        result = cleanup_project_directory(project_path, session_log)
         
         assert result is False
     
     def test_cleanup_handles_exception(self):
         """Test cleanup handles exceptions."""
-        from src.commands.createproject import _cleanup_project_directory
+        from src.commands.createproject import cleanup_project_directory
         
         session_log = SessionLogCollector("test")
         
@@ -1048,7 +1048,7 @@ class TestCleanupProjectDirectory:
             with patch.object(shutil, 'rmtree') as mock_rmtree:
                 mock_rmtree.side_effect = PermissionError("Access denied")
                 
-                result = _cleanup_project_directory(project_path, session_log)
+                result = cleanup_project_directory(project_path, session_log)
                 
                 assert result is False
             
@@ -1275,7 +1275,7 @@ class TestBuildUnifiedMessageTruncation:
 
 
 class TestCreateProjectDirectoryWithNaming:
-    """Tests for _create_project_directory with creative naming."""
+    """Tests for create_project_directory with creative naming."""
     
     @pytest.mark.asyncio
     async def test_uses_creative_name_when_available(self):
@@ -1287,7 +1287,7 @@ class TestCreateProjectDirectoryWithNaming:
                     mock_naming.generate_name.return_value = "creative-project-name"
                     
                     session_log = SessionLogCollector("test")
-                    project_path, folder_name = await _create_project_directory(
+                    project_path, folder_name = await create_project_directory(
                         "testuser", session_log, "create a web app"
                     )
                     
@@ -1304,7 +1304,7 @@ class TestCreateProjectDirectoryWithNaming:
                     mock_naming.generate_name.return_value = None  # Failed to generate
                     
                     session_log = SessionLogCollector("test")
-                    project_path, folder_name = await _create_project_directory(
+                    project_path, folder_name = await create_project_directory(
                         "testuser", session_log, "create a web app"
                     )
                     
@@ -1320,7 +1320,7 @@ class TestCreateProjectDirectoryWithNaming:
                     mock_naming.is_configured.return_value = False
                     
                     session_log = SessionLogCollector("test")
-                    project_path, folder_name = await _create_project_directory(
+                    project_path, folder_name = await create_project_directory(
                         "testuser", session_log, ""
                     )
                     
@@ -1328,7 +1328,7 @@ class TestCreateProjectDirectoryWithNaming:
 
 
 class TestSendInitialMessageTruncation:
-    """Tests for _send_initial_message with long prompts."""
+    """Tests for send_initial_message with long prompts."""
     
     @pytest.mark.asyncio
     async def test_truncates_long_prompt(self):
@@ -1343,7 +1343,7 @@ class TestSendInitialMessageTruncation:
             project_path = Path(tmpdir)
             long_prompt = "x" * 500  # Longer than PROMPT_SUMMARY_TRUNCATE_LENGTH
             
-            await _send_initial_message(mock_interaction, project_path, long_prompt, None)
+            await send_initial_message(mock_interaction, project_path, long_prompt, None)
             
             call_args = str(mock_interaction.followup.send.call_args)
             assert "..." in call_args
@@ -1491,13 +1491,13 @@ class TestGithubIntegrationEdgeCases:
     @pytest.mark.asyncio
     async def test_github_with_none_process(self):
         """Test GitHub integration when process is None (line 470 condition fails)."""
-        from src.commands.createproject import _handle_github_integration
+        from src.commands.createproject import handle_github_integration
         
         session_log = SessionLogCollector("test")
         
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch('src.commands.createproject.GITHUB_ENABLED', True):
-                status, success, description, github_url = await _handle_github_integration(
+                status, success, description, github_url = await handle_github_integration(
                     Path(tmpdir), "test_folder", "test prompt",
                     False, False, None, session_log  # process=None
                 )
@@ -1554,7 +1554,7 @@ class TestHandleRemoveReadonly:
 
 
 class TestCleanupWithReadonlyFiles:
-    """Tests for _cleanup_project_directory with read-only files."""
+    """Tests for cleanup_project_directory with read-only files."""
     
     def test_cleanup_with_readonly_git_objects(self):
         """Test cleanup handles read-only .git files like on Windows."""
@@ -1577,7 +1577,7 @@ class TestCleanupWithReadonlyFiles:
             # Also create a normal file
             (project_path / "test.txt").touch()
             
-            result = _cleanup_project_directory(project_path, session_log)
+            result = cleanup_project_directory(project_path, session_log)
             
             assert result is True
             assert not project_path.exists()
@@ -1602,7 +1602,7 @@ class TestCleanupWithReadonlyFiles:
                     readonly_file.touch()
                     os.chmod(str(readonly_file), stat.S_IREAD)
             
-            result = _cleanup_project_directory(project_path, session_log)
+            result = cleanup_project_directory(project_path, session_log)
             
             assert result is True
             assert not project_path.exists()
@@ -1622,8 +1622,8 @@ class TestWebhookTokenExpiration:
         return interaction
     
     @pytest.mark.asyncio
-    async def test_update_final_message_refetches_on_expired_token(self, mock_interaction):
-        """Test that _update_final_message re-fetches message when token expires."""
+    async def testupdate_final_message_refetches_on_expired_token(self, mock_interaction):
+        """Test that update_final_message re-fetches message when token expires."""
         import discord
         
         mock_unified_msg = AsyncMock()
@@ -1649,7 +1649,7 @@ class TestWebhookTokenExpiration:
             tmppath = Path(tmpdir)
             (tmppath / "test.txt").touch()
             
-            await _update_final_message(
+            await update_final_message(
                 mock_unified_msg, tmppath, output_buffer, mock_interaction,
                 "test prompt", None, False, False, "", mock_process, ""
             )
@@ -1659,8 +1659,8 @@ class TestWebhookTokenExpiration:
             fresh_msg.edit.assert_called_once()
     
     @pytest.mark.asyncio
-    async def test_update_final_message_reraises_other_http_errors(self, mock_interaction):
-        """Test that _update_final_message handles non-50027 HTTP errors gracefully."""
+    async def testupdate_final_message_reraises_other_http_errors(self, mock_interaction):
+        """Test that update_final_message handles non-50027 HTTP errors gracefully."""
         import discord
         
         mock_unified_msg = AsyncMock()
@@ -1681,7 +1681,7 @@ class TestWebhookTokenExpiration:
             tmppath = Path(tmpdir)
             
             # Should not raise, just log warning
-            await _update_final_message(
+            await update_final_message(
                 mock_unified_msg, tmppath, output_buffer, mock_interaction,
                 "test prompt", None, False, False, "", mock_process, ""
             )

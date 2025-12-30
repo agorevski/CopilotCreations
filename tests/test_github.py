@@ -9,7 +9,12 @@ from unittest.mock import Mock, patch, MagicMock
 import pytest
 from github import GithubException
 
-from src.utils.github import GitHubManager
+from src.utils.github import (
+    GitHubManager,
+    MAX_DESCRIPTION_LENGTH,
+    DISCORD_INVALID_WEBHOOK_TOKEN,
+    GIT_OPERATION_TIMEOUT
+)
 
 
 class TestGitHubManagerInit:
@@ -601,7 +606,7 @@ class TestSanitizeDescription:
             long_desc = "x" * 400
             result = manager.sanitize_description(long_desc)
             
-            assert len(result) <= manager.MAX_DESCRIPTION_LENGTH
+            assert len(result) <= MAX_DESCRIPTION_LENGTH
             assert result.endswith("...")
     
     def test_sanitize_description_replaces_whitespace(self):
@@ -676,3 +681,45 @@ class TestInitAndPushLogging:
             assert success is True
             # Verify debug logging happened
             assert mock_logger.debug.call_count >= 1
+
+
+class TestGitHubConstants:
+    """Tests for GitHub module constants."""
+    
+    def test_discord_invalid_webhook_token_is_int(self):
+        """Test that DISCORD_INVALID_WEBHOOK_TOKEN is the expected value."""
+        assert isinstance(DISCORD_INVALID_WEBHOOK_TOKEN, int)
+        assert DISCORD_INVALID_WEBHOOK_TOKEN == 50027
+    
+    def test_max_description_length_is_int(self):
+        """Test that MAX_DESCRIPTION_LENGTH is the expected value."""
+        assert isinstance(MAX_DESCRIPTION_LENGTH, int)
+        assert MAX_DESCRIPTION_LENGTH == 350
+    
+    def test_git_operation_timeout_is_int(self):
+        """Test that GIT_OPERATION_TIMEOUT is the expected value."""
+        assert isinstance(GIT_OPERATION_TIMEOUT, int)
+        assert GIT_OPERATION_TIMEOUT == 60
+
+
+class TestGitHubManagerDependencyInjection:
+    """Tests for GitHubManager dependency injection support."""
+    
+    def test_init_with_custom_credentials(self):
+        """Test that GitHubManager accepts custom credentials."""
+        manager = GitHubManager(
+            token="custom_token",
+            username="custom_user",
+            enabled=True
+        )
+        
+        assert manager.token == "custom_token"
+        assert manager.username == "custom_user"
+        assert manager.enabled is True
+    
+    def test_init_with_disabled_integration(self):
+        """Test that GitHubManager can be explicitly disabled."""
+        manager = GitHubManager(enabled=False)
+        
+        assert manager.enabled is False
+        assert manager.github is None

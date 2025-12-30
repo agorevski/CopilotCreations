@@ -60,8 +60,21 @@ def init_config() -> None:
         try:
             with open(CONFIG_YAML_PATH, 'r', encoding='utf-8') as f:
                 PROMPT_TEMPLATES.update(yaml.safe_load(f) or {})
-        except Exception:
-            pass  # Silently ignore config.yaml errors, use empty templates
+        except yaml.YAMLError as e:
+            import logging
+            logging.getLogger("copilot_bot").warning(
+                f"Failed to parse config.yaml: {e}. Using empty templates."
+            )
+        except IOError as e:
+            import logging
+            logging.getLogger("copilot_bot").warning(
+                f"Failed to read config.yaml: {e}. Using empty templates."
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger("copilot_bot").warning(
+                f"Unexpected error loading config.yaml: {type(e).__name__}: {e}. Using empty templates."
+            )
     
     _initialized = True
 

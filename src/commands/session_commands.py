@@ -10,10 +10,13 @@ This module provides:
 
 import asyncio
 import io
-from typing import Optional, Callable
+from typing import Optional, Callable, TYPE_CHECKING
 
 import discord
 from discord import app_commands
+
+if TYPE_CHECKING:
+    from ..bot import CopilotBot
 
 from ..config import (
     MAX_PROMPT_LENGTH,
@@ -26,12 +29,12 @@ from ..utils.text_utils import format_error_message, split_message
 from ..utils.session_manager import get_session_manager
 from ..utils.prompt_refinement import get_refinement_service
 from .createproject import (
-    _create_project_directory,
-    _send_initial_message,
-    _run_copilot_process,
-    _update_final_message,
-    _handle_github_integration,
-    _cleanup_project_directory,
+    create_project_directory,
+    send_initial_message,
+    run_copilot_process,
+    update_final_message,
+    handle_github_integration,
+    cleanup_project_directory,
     update_unified_message,
 )
 from ..utils import (
@@ -53,7 +56,7 @@ import uuid
 from datetime import datetime
 
 
-def setup_session_commands(bot) -> tuple:
+def setup_session_commands(bot: "CopilotBot") -> tuple:
     """Set up the session-based project commands on the bot.
     
     Returns:
@@ -309,7 +312,7 @@ async def _execute_project_creation(
     interaction: discord.Interaction,
     prompt: str,
     model: Optional[str],
-    bot
+    bot: "CopilotBot"
 ) -> None:
     """Execute the project creation process.
     
@@ -341,7 +344,7 @@ async def _execute_project_creation(
     
     # Create project directory
     try:
-        project_path, folder_name = await _create_project_directory(username, session_log, prompt)
+        project_path, folder_name = await create_project_directory(username, session_log, prompt)
     except Exception as e:
         session_log.error(f"Failed to create project directory: {e}")
         await interaction.channel.send(
@@ -351,7 +354,7 @@ async def _execute_project_creation(
     
     # Send initial unified message
     try:
-        unified_msg = await _send_initial_message(interaction, project_path, prompt, model)
+        unified_msg = await send_initial_message(interaction, project_path, prompt, model)
     except Exception as e:
         session_log.error(f"Failed to send Discord message: {e}")
         await interaction.channel.send(
@@ -375,7 +378,7 @@ async def _execute_project_creation(
     
     try:
         # Run the copilot process
-        timed_out, error_occurred, error_message, process = await _run_copilot_process(
+        timed_out, error_occurred, error_message, process = await run_copilot_process(
             project_path, full_prompt, model, session_log, output_buffer, is_running, error_event
         )
     finally:
@@ -387,12 +390,12 @@ async def _execute_project_creation(
             pass
     
     # Handle GitHub integration
-    github_status, github_success, repo_description, github_url = await _handle_github_integration(
+    github_status, github_success, repo_description, github_url = await handle_github_integration(
         project_path, folder_name, prompt, timed_out, error_occurred, process, session_log
     )
     
     # Final update to unified message
-    await _update_final_message(
+    await update_final_message(
         unified_msg, project_path, output_buffer, interaction,
         prompt, model, timed_out, error_occurred, error_message,
         process, github_status,
@@ -403,10 +406,10 @@ async def _execute_project_creation(
     
     # Cleanup if configured
     if CLEANUP_AFTER_PUSH and github_success:
-        _cleanup_project_directory(project_path, session_log)
+        cleanup_project_directory(project_path, session_log)
 
 
-def setup_message_listener(bot) -> Callable:
+def setup_message_listener(bot: "CopilotBot") -> Callable:
     """Set up the message listener for capturing session messages.
     
     Returns:
