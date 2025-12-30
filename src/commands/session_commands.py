@@ -211,8 +211,11 @@ def setup_session_commands(bot) -> tuple:
         
         await interaction.response.defer()
         
-        # Finalize the prompt using AI if configured
-        if refinement_service.is_configured() and session.conversation_history:
+        # Use already-refined prompt if available, otherwise finalize
+        if session.refined_prompt:
+            final_prompt = session.refined_prompt
+            logger.info("Using pre-refined prompt from session")
+        elif refinement_service.is_configured() and session.conversation_history:
             final_prompt = await refinement_service.finalize_prompt(session.conversation_history)
         else:
             final_prompt = session.get_full_user_input()
