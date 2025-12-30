@@ -234,7 +234,7 @@ class TestGenerateName:
             call_kwargs = mock_client.chat.completions.create.call_args[1]
             assert call_kwargs['model'] == 'gpt-52'
             assert 'messages' in call_kwargs
-            assert call_kwargs['max_completion_tokens'] == 50
+            assert call_kwargs['max_completion_tokens'] == 50000
             assert call_kwargs['stop'] is None
             assert call_kwargs['stream'] is False
             # Ensure deprecated parameters are not used
@@ -349,3 +349,144 @@ class TestNamingGeneratorSingleton:
         from src.utils.naming import naming_generator
         assert naming_generator is not None
         assert isinstance(naming_generator, RepositoryNamingGenerator)
+
+
+class TestGenerateDescription:
+    """Tests for generate_description method."""
+    
+    def test_generate_description_not_configured(self):
+        """Test generate_description returns None when not configured."""
+        with patch('src.utils.naming.AZURE_OPENAI_ENDPOINT', None), \
+             patch('src.utils.naming.AZURE_OPENAI_API_KEY', None), \
+             patch('src.utils.naming.AZURE_OPENAI_DEPLOYMENT_NAME', None):
+            generator = RepositoryNamingGenerator()
+            result = generator.generate_description("A todo list app")
+            
+            assert result is None
+    
+    def test_generate_description_success(self):
+        """Test successful description generation."""
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = "A modern todo list application."
+        
+        mock_client = Mock()
+        mock_client.chat.completions.create.return_value = mock_response
+        
+        with patch('src.utils.naming.AZURE_OPENAI_ENDPOINT', 'https://test.openai.azure.com/'), \
+             patch('src.utils.naming.AZURE_OPENAI_API_KEY', 'test_key'), \
+             patch('src.utils.naming.AZURE_OPENAI_DEPLOYMENT_NAME', 'gpt-52'), \
+             patch('src.utils.naming.AZURE_OPENAI_API_VERSION', '2025-01-01-preview'), \
+             patch('src.utils.naming.AzureOpenAI', return_value=mock_client), \
+             patch('src.utils.naming.get_prompt_template', return_value='Generate description:'):
+            generator = RepositoryNamingGenerator()
+            result = generator.generate_description("A todo list app")
+            
+            assert result == "A modern todo list application."
+    
+    def test_generate_description_empty_response(self):
+        """Test generate_description with empty response."""
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = ""
+        
+        mock_client = Mock()
+        mock_client.chat.completions.create.return_value = mock_response
+        
+        with patch('src.utils.naming.AZURE_OPENAI_ENDPOINT', 'https://test.openai.azure.com/'), \
+             patch('src.utils.naming.AZURE_OPENAI_API_KEY', 'test_key'), \
+             patch('src.utils.naming.AZURE_OPENAI_DEPLOYMENT_NAME', 'gpt-52'), \
+             patch('src.utils.naming.AZURE_OPENAI_API_VERSION', '2025-01-01-preview'), \
+             patch('src.utils.naming.AzureOpenAI', return_value=mock_client), \
+             patch('src.utils.naming.get_prompt_template', return_value='Generate description:'):
+            generator = RepositoryNamingGenerator()
+            result = generator.generate_description("A todo list app")
+            
+            assert result is None
+    
+    def test_generate_description_sanitization_empty(self):
+        """Test generate_description returns None when sanitization results in empty."""
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = "   "  # Only whitespace
+        
+        mock_client = Mock()
+        mock_client.chat.completions.create.return_value = mock_response
+        
+        with patch('src.utils.naming.AZURE_OPENAI_ENDPOINT', 'https://test.openai.azure.com/'), \
+             patch('src.utils.naming.AZURE_OPENAI_API_KEY', 'test_key'), \
+             patch('src.utils.naming.AZURE_OPENAI_DEPLOYMENT_NAME', 'gpt-52'), \
+             patch('src.utils.naming.AZURE_OPENAI_API_VERSION', '2025-01-01-preview'), \
+             patch('src.utils.naming.AzureOpenAI', return_value=mock_client), \
+             patch('src.utils.naming.get_prompt_template', return_value='Generate description:'):
+            generator = RepositoryNamingGenerator()
+            result = generator.generate_description("A todo list app")
+            
+            assert result is None
+    
+    def test_generate_description_api_exception(self):
+        """Test generate_description handles API exceptions gracefully."""
+        mock_client = Mock()
+        mock_client.chat.completions.create.side_effect = Exception("API error")
+        
+        with patch('src.utils.naming.AZURE_OPENAI_ENDPOINT', 'https://test.openai.azure.com/'), \
+             patch('src.utils.naming.AZURE_OPENAI_API_KEY', 'test_key'), \
+             patch('src.utils.naming.AZURE_OPENAI_DEPLOYMENT_NAME', 'gpt-52'), \
+             patch('src.utils.naming.AZURE_OPENAI_API_VERSION', '2025-01-01-preview'), \
+             patch('src.utils.naming.AzureOpenAI', return_value=mock_client), \
+             patch('src.utils.naming.get_prompt_template', return_value='Generate description:'):
+            generator = RepositoryNamingGenerator()
+            result = generator.generate_description("A todo list app")
+            
+            assert result is None
+    
+    def test_generate_description_uses_default_prompt(self):
+        """Test generate_description uses default prompt when template missing."""
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = "A cool project"
+        
+        mock_client = Mock()
+        mock_client.chat.completions.create.return_value = mock_response
+        
+        with patch('src.utils.naming.AZURE_OPENAI_ENDPOINT', 'https://test.openai.azure.com/'), \
+             patch('src.utils.naming.AZURE_OPENAI_API_KEY', 'test_key'), \
+             patch('src.utils.naming.AZURE_OPENAI_DEPLOYMENT_NAME', 'gpt-52'), \
+             patch('src.utils.naming.AZURE_OPENAI_API_VERSION', '2025-01-01-preview'), \
+             patch('src.utils.naming.AzureOpenAI', return_value=mock_client), \
+             patch('src.utils.naming.get_prompt_template', return_value=''):  # Empty template
+            generator = RepositoryNamingGenerator()
+            result = generator.generate_description("A todo list app")
+            
+            assert result == "A cool project"
+
+
+class TestSanitizeDescription:
+    """Tests for _sanitize_description method."""
+    
+    def test_sanitize_description_removes_quotes(self):
+        """Test that quotes are removed from description."""
+        with patch('src.utils.naming.AZURE_OPENAI_ENDPOINT', None):
+            generator = RepositoryNamingGenerator()
+            result = generator._sanitize_description('"A cool project"')
+            
+            assert result == "A cool project"
+    
+    def test_sanitize_description_removes_control_chars(self):
+        """Test that control characters are removed."""
+        with patch('src.utils.naming.AZURE_OPENAI_ENDPOINT', None):
+            generator = RepositoryNamingGenerator()
+            result = generator._sanitize_description("A project\x00\x01\x02")
+            
+            assert "\x00" not in result
+            assert "A project" in result
+    
+    def test_sanitize_description_truncates_long(self):
+        """Test that long descriptions are truncated."""
+        with patch('src.utils.naming.AZURE_OPENAI_ENDPOINT', None):
+            generator = RepositoryNamingGenerator()
+            long_desc = "x" * 400
+            result = generator._sanitize_description(long_desc)
+            
+            assert len(result) <= generator.MAX_DESCRIPTION_LENGTH
+            assert result.endswith("...")

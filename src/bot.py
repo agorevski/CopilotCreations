@@ -20,6 +20,7 @@ class CopilotBot(discord.Client):
     
     def __init__(self) -> None:
         intents = discord.Intents.default()
+        intents.message_content = True  # Required for reading message content in sessions
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
         self._shutdown_event: Optional[asyncio.Event] = None

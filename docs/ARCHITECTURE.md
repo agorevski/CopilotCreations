@@ -23,15 +23,20 @@ CopilotCreations/
 │   │
 │   ├── commands/         # Discord slash commands
 │   │   ├── __init__.py
-│   │   └── createproject.py  # /createproject command handler
+│   │   ├── createproject.py   # /createproject command handler
+│   │   └── session_commands.py # /startproject, /buildproject, /cancelprompt
 │   │
 │   └── utils/            # Utility modules
 │       ├── __init__.py
-│       ├── logging.py    # Logging and session log collector
+│       ├── logging.py        # Logging and session log collector
 │       ├── folder_utils.py   # Folder tree and ignore pattern utilities
-│       ├── text_utils.py # Text manipulation utilities
-│       ├── github.py     # GitHub integration utilities
-│       └── async_buffer.py   # Thread-safe async output buffer
+│       ├── text_utils.py     # Text manipulation utilities
+│       ├── github.py         # GitHub integration utilities
+│       ├── naming.py         # AI-powered repository naming
+│       ├── async_buffer.py   # Thread-safe async output buffer
+│       ├── session_manager.py    # User session tracking for prompt building
+│       ├── prompt_refinement.py  # AI-assisted prompt refinement service
+│       └── process_registry.py   # Subprocess tracking and cleanup
 │
 ├── tests/                # Test suite
 │   ├── __init__.py
@@ -42,6 +47,10 @@ CopilotCreations/
 │   ├── test_folder_utils.py
 │   ├── test_github.py
 │   ├── test_logging.py
+│   ├── test_naming.py
+│   ├── test_process_registry.py
+│   ├── test_prompt_refinement.py
+│   ├── test_session_manager.py
 │   └── test_text_utils.py
 │
 ├── docs/                 # Documentation
@@ -82,25 +91,35 @@ YAML file containing prompt templates that are prepended to user prompts:
   - Defines professional project requirements (CI/CD, tests, documentation)
   - Specifies expected directory structure
   - Sets quality standards (e.g., 75% test coverage)
+- **`prompt_refinement_system`** - System prompt for AI-assisted prompt refinement
+  - Systematic 4-round questioning strategy covering 14 areas
+  - Produces exhaustive 12-section project specifications
+  - Anti-vagueness rules ensure explicit, actionable requirements
+- **`repository_naming_prompt`** - Prompt for generating creative repo names
+- **`repository_description_prompt`** - Prompt for generating repo descriptions
 
 ### Configuration (`src/config.py`)
 
 Centralized configuration with explicit initialization:
 - **`init_config()`** - Must be called at startup to:
-  - Load `.env` file via `load_dotenv()`
   - Create `PROJECTS_DIR` directory
-  - Set configuration variables
+  - Load prompt templates from `config.yaml`
+  - Set initialization flag
+- Environment variables are loaded via `load_dotenv()` at module import time
 - **`is_initialized()`** - Check if config has been initialized
 - Discord bot token
-- GitHub integration settings (`GITHUB_ENABLED`, `GITHUB_TOKEN`, `GITHUB_USERNAME`)
+- GitHub integration settings (`GITHUB_ENABLED`, `GITHUB_TOKEN`, `GITHUB_USERNAME`, `GITHUB_REPO_PRIVATE`)
+- Cleanup settings (`CLEANUP_AFTER_PUSH`)
 - Project paths
 - Timeout settings
-- Message length limits
+- Message length limits (`MAX_FOLDER_STRUCTURE_LENGTH`, `MAX_COPILOT_OUTPUT_LENGTH`, `MAX_SUMMARY_LENGTH`)
+- Parallelism settings (`MAX_PARALLEL_REQUESTS`)
 - Copilot CLI default flags
 - Prompt truncation lengths (`PROMPT_LOG_TRUNCATE_LENGTH`, `PROMPT_SUMMARY_TRUNCATE_LENGTH`)
 - Unique ID generation settings (`UNIQUE_ID_LENGTH`)
 - Progress logging interval (`PROGRESS_LOG_INTERVAL_SECONDS`)
 - Input validation (`MAX_PROMPT_LENGTH`, `MODEL_NAME_PATTERN`)
+- Azure OpenAI settings (`AZURE_OPENAI_API_VERSION`)
 
 ### Commands (`src/commands/`)
 
@@ -120,7 +139,6 @@ The main command is organized into modular helper functions:
 - `_run_copilot_process()` - Executes copilot CLI with timeout handling
 - `_update_final_message()` - Updates unified message with final state
 - `_handle_github_integration()` - Creates GitHub repo and pushes code
-- `_send_log_file()` - Sends log file attachment after completion
 
 **Input Validation:**
 - Empty prompts are rejected
@@ -131,7 +149,52 @@ The main command is organized into modular helper functions:
 - `update_unified_message()` - Updates all three sections in a single message every 3 seconds
 - `read_stream()` - Reads process output to async buffer
 
+#### Session Commands (`/startproject`, `/buildproject`, `/cancelprompt`)
+
+Conversational prompt-building commands:
+
+**`/startproject`:**
+- Starts a new prompt-building session
+- Tracks all user messages and bot responses
+- Uses AI to ask clarifying questions (if Azure OpenAI configured)
+
+**`/buildproject`:**
+- Finalizes the session and generates project
+- Deletes all session messages from the channel (requires Manage Messages permission)
+- Uses AI to produce exhaustive 12-section specification
+- Reuses `_execute_project_creation()` for actual project generation
+
+**`/cancelprompt`:**
+- Cancels active session and discards collected messages
+
+**Message Listener:**
+- Captures user messages during active sessions
+- Tracks message IDs for cleanup on build
+- Sends AI responses with clarifying questions
+
 ### Utilities (`src/utils/`)
+
+#### `session_manager.py`
+- `PromptSession` dataclass - Tracks user session state
+  - `messages` - User messages collected during session
+  - `conversation_history` - Full conversation for AI context
+  - `message_ids` - Discord message IDs for cleanup on build
+  - `refined_prompt` - Final AI-generated specification
+- `SessionManager` class - Manages active sessions
+  - Start/end/get sessions by user+channel
+  - Automatic session expiry after timeout
+  - Background cleanup task for expired sessions
+
+#### `prompt_refinement.py`
+- `PromptRefinementService` class - AI-assisted prompt refinement
+  - Uses Azure OpenAI for conversational refinement
+  - Systematic questioning across 14 areas in 4 rounds
+  - Generates exhaustive 12-section project specifications
+  - Anti-vagueness rules ensure explicit requirements
+
+#### `naming.py`
+- `generate_creative_name()` - AI-powered repository naming
+- `generate_description()` - AI-powered repository descriptions
 
 #### `async_buffer.py`
 - `AsyncOutputBuffer` class - Thread-safe buffer for concurrent async operations
@@ -165,7 +228,18 @@ The main command is organized into modular helper functions:
   - `create_and_push_project()`: Complete workflow for GitHub integration
 - `github_manager`: Singleton instance for easy access
 
+#### `process_registry.py`
+- `ProcessRegistry`: Class for tracking and cleaning up subprocesses
+  - `register()`: Register a subprocess for tracking
+  - `unregister()`: Remove a subprocess from tracking
+  - `kill_all()`: Async method to kill all tracked subprocesses
+  - `kill_all_sync()`: Sync method for signal handlers
+  - `active_count`: Property returning number of tracked processes
+- `get_process_registry()`: Get or create the global singleton instance
+
 ## Data Flow
+
+### Quick Project Creation (`/createproject`)
 
 ```
 User sends /createproject command
@@ -223,12 +297,51 @@ User sends /createproject command
 ┌─────────────────────────┐
 │  Update Final Message   │
 │  _update_final_message()│
+└─────────────────────────┘
+```
+
+### Conversational Project Creation (`/startproject` → `/buildproject`)
+
+```
+User sends /startproject
+        │
+        ▼
+┌─────────────────────────┐
+│  Create Session         │
+│  SessionManager         │
 └───────────┬─────────────┘
             │
             ▼
 ┌─────────────────────────┐
-│  Send Log File          │
-│  _send_log_file()       │
+│  AI Asks Questions      │◄──────────┐
+│  PromptRefinementService│           │
+└───────────┬─────────────┘           │
+            │                         │
+            ▼                         │
+┌─────────────────────────┐           │
+│  User Sends Messages    │           │
+│  (tracked in session)   │───────────┘
+└───────────┬─────────────┘    (repeat 2-4 rounds)
+            │
+            ▼
+User sends /buildproject
+        │
+        ▼
+┌─────────────────────────┐
+│  Generate Final Spec    │
+│  (12-section format)    │
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│  Delete Session Messages│
+│  (cleanup chat)         │
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│  Execute Project Creation│
+│  (same as /createproject)│
 └─────────────────────────┘
 ```
 
@@ -239,9 +352,9 @@ User sends /createproject command
 - Updates every 3 seconds (configurable via `UPDATE_INTERVAL`)
 - Only sends updates when content changes (rate limit friendly)
 - Each section has character limits:
-  - Folder structure: 750 characters (truncated with ellipsis)
-  - Copilot output: 2500 characters (truncated from start)
-  - Summary: Dynamic with status, stats, and GitHub URL
+  - Folder structure: 400 characters (truncated with ellipsis)
+  - Copilot output: 800 characters (truncated from start)
+  - Summary: 500 characters with status, stats, and GitHub URL
 
 ### Thread-Safe Operations
 - `AsyncOutputBuffer` provides atomic append and read operations
@@ -260,8 +373,14 @@ User sends /createproject command
 
 ### Session Logging
 - Each command session has its own log collector
-- Logs are attached as markdown files to the summary message
-- Includes timing, status, and full execution log
+- Logs are kept internally for debugging
+- Status information displayed in unified message
+
+### Chat Cleanup
+- Session messages (user + bot) are tracked by ID
+- All messages deleted when `/buildproject` runs
+- Requires **Manage Messages** permission
+- Graceful fallback if permission denied
 
 ### Error Handling
 - Graceful handling of timeouts (30 minute limit)
@@ -285,9 +404,10 @@ Bot instances are created via factory functions (`get_bot()`, `create_bot()`) ra
 - Easy reset for test cleanup
 
 ### Explicit Initialization
-Configuration is loaded via `init_config()` at startup rather than at import time:
-- No side effects during module import
-- Easier testing without unwanted file I/O
+Configuration directories and templates are set up via `init_config()` at startup:
+- Directory creation happens explicitly, not at import time
+- Prompt templates loaded from config.yaml
+- Environment variables loaded via `load_dotenv()` at import (safe operation)
 - Clear initialization sequence in `run.py`
 
 ### DRY (Don't Repeat Yourself)

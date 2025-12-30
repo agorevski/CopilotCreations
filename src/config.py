@@ -115,5 +115,8 @@ UNIQUE_ID_LENGTH = 8
 PROGRESS_LOG_INTERVAL_SECONDS = 30
 
 # Input validation
-MAX_PROMPT_LENGTH = 10000
+MAX_PROMPT_LENGTH = 500000  # 500k chars (~75,000 words) for session-based prompts
 MODEL_NAME_PATTERN = r'^[a-zA-Z0-9\-_.]+$'
+
+# Session configuration
+SESSION_TIMEOUT_MINUTES = int(os.getenv("SESSION_TIMEOUT_MINUTES", "30"))

@@ -153,12 +153,13 @@ class RepositoryNamingGenerator:
             response = self.client.chat.completions.create(
                 model=self.deployment_name,
                 messages=messages,
-                max_completion_tokens=50,
+                max_completion_tokens=50000,
                 stop=None,
                 stream=False
             )
             
             raw_name = response.choices[0].message.content
+            logger.info(f"GPT Response (naming): {raw_name}")
             if not raw_name:
                 logger.warning("Azure OpenAI returned empty response")
                 return None
@@ -217,12 +218,13 @@ class RepositoryNamingGenerator:
             response = self.client.chat.completions.create(
                 model=self.deployment_name,
                 messages=messages,
-                max_completion_tokens=100,
+                max_completion_tokens=50000,
                 stop=None,
                 stream=False
             )
             
             raw_description = response.choices[0].message.content
+            logger.info(f"GPT Response (description): {raw_description}")
             if not raw_description:
                 logger.warning("Azure OpenAI returned empty description")
                 return None

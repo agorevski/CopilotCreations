@@ -563,3 +563,116 @@ class TestGitHubManagerSingleton:
         from src.utils.github import github_manager
         assert github_manager is not None
         assert isinstance(github_manager, GitHubManager)
+
+
+class TestSanitizeDescription:
+    """Tests for sanitize_description method."""
+    
+    def test_sanitize_description_removes_quotes(self):
+        """Test that quotes are removed from description."""
+        with patch('src.utils.github.GITHUB_ENABLED', False):
+            manager = GitHubManager()
+            result = manager.sanitize_description('"A cool project"')
+            
+            assert result == "A cool project"
+    
+    def test_sanitize_description_removes_control_chars(self):
+        """Test that control characters are removed."""
+        with patch('src.utils.github.GITHUB_ENABLED', False):
+            manager = GitHubManager()
+            result = manager.sanitize_description("A project\x00\x01\x02")
+            
+            assert "\x00" not in result
+            assert "A project" in result
+    
+    def test_sanitize_description_removes_unicode(self):
+        """Test that non-ASCII unicode is removed."""
+        with patch('src.utils.github.GITHUB_ENABLED', False):
+            manager = GitHubManager()
+            result = manager.sanitize_description("A project 🚀 with emoji")
+            
+            assert "🚀" not in result
+            assert "A project" in result
+    
+    def test_sanitize_description_truncates_long(self):
+        """Test that long descriptions are truncated."""
+        with patch('src.utils.github.GITHUB_ENABLED', False):
+            manager = GitHubManager()
+            long_desc = "x" * 400
+            result = manager.sanitize_description(long_desc)
+            
+            assert len(result) <= manager.MAX_DESCRIPTION_LENGTH
+            assert result.endswith("...")
+    
+    def test_sanitize_description_replaces_whitespace(self):
+        """Test that multiple whitespace is replaced."""
+        with patch('src.utils.github.GITHUB_ENABLED', False):
+            manager = GitHubManager()
+            result = manager.sanitize_description("A   project   with    spaces")
+            
+            assert "   " not in result
+            assert "A project with spaces" == result
+
+
+class TestCreateRepositoryErrors:
+    """Tests for create_repository error handling with detailed errors."""
+    
+    def test_create_repository_with_errors_list(self):
+        """Test create_repository with detailed errors list (lines 160-164)."""
+        mock_github = Mock()
+        mock_user = Mock()
+        mock_user.create_repo.side_effect = GithubException(
+            422, 
+            {
+                "message": "Validation Failed",
+                "errors": [
+                    {"field": "name", "code": "already_exists"},
+                    {"field": "description", "code": "invalid"}
+                ],
+                "documentation_url": "https://docs.github.com/rest"
+            }, 
+            None
+        )
+        mock_github.get_user.return_value = mock_user
+        
+        with patch('src.utils.github.GITHUB_ENABLED', True), \
+             patch('src.utils.github.GITHUB_TOKEN', 'token'), \
+             patch('src.utils.github.GITHUB_USERNAME', 'user'), \
+             patch('src.utils.github.Github', return_value=mock_github):
+            manager = GitHubManager()
+            success, message, url = manager.create_repository("test-repo")
+            
+            assert success is False
+            assert "Details:" in message
+            assert url is None
+
+
+class TestInitAndPushLogging:
+    """Tests for init_and_push logging behavior."""
+    
+    def test_init_and_push_logs_safe_command(self, tmp_path):
+        """Test init_and_push logs safe command for remote add (line 232-237)."""
+        mock_result = Mock()
+        mock_result.returncode = 0
+        mock_result.stderr = ""
+        
+        mock_user = Mock()
+        mock_user.login = "testuser"
+        mock_user.name = "Test User"
+        mock_user.email = "test@example.com"
+        
+        mock_github = Mock()
+        mock_github.get_user.return_value = mock_user
+        
+        with patch('src.utils.github.GITHUB_ENABLED', True), \
+             patch('src.utils.github.GITHUB_TOKEN', 'token'), \
+             patch('src.utils.github.GITHUB_USERNAME', 'user'), \
+             patch('src.utils.github.Github', return_value=mock_github), \
+             patch('subprocess.run', return_value=mock_result), \
+             patch('src.utils.github.logger') as mock_logger:
+            manager = GitHubManager()
+            success, message = manager.init_and_push(tmp_path, "test-repo")
+            
+            assert success is True
+            # Verify debug logging happened
+            assert mock_logger.debug.call_count >= 1

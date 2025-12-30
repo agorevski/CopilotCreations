@@ -678,7 +678,7 @@ class TestCommandValidation:
         mock_bot.tree.command = capture_command
         setup_createproject_command(mock_bot)
         
-        long_prompt = "x" * 20000  # Exceeds MAX_PROMPT_LENGTH
+        long_prompt = "x" * 600000  # Exceeds MAX_PROMPT_LENGTH (500,000)
         await captured_handler(mock_interaction, long_prompt, None)
         
         mock_interaction.response.send_message.assert_called_once()

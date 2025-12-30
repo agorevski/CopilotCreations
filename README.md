@@ -5,9 +5,11 @@ A Discord bot that executes `copilot-cli` to create projects based on user promp
 ## Features
 
 - `/createproject` slash command to generate projects from natural language prompts
+- `/startproject` + `/buildproject` for conversational AI-assisted prompt refinement
+- **AI-Powered Prompt Refinement** - Generates exhaustive 12-section project specifications via Azure OpenAI
 - **Unified real-time progress** - Single message with folder structure, copilot output, and summary updated every 3 seconds
+- **Clean Chat Experience** - Session messages are automatically deleted after project build
 - 30-minute timeout protection with concurrent user support
-- Session logging with markdown log file attachments
 - **GitHub Integration** - Automatically create repositories and push project files
 - **Graceful Shutdown** - Proper signal handling for clean process termination
 - **Thread-Safe Operations** - Async-safe output buffering prevents race conditions
@@ -31,6 +33,7 @@ A Discord bot that executes `copilot-cli` to create projects based on user promp
    # GITHUB_ENABLED=true
    # GITHUB_TOKEN=your_github_personal_access_token
    # GITHUB_USERNAME=your_github_username
+   # GITHUB_REPO_PRIVATE=true  # Optional: make repos private
    ```
 
 4. Run the bot:
@@ -38,13 +41,25 @@ A Discord bot that executes `copilot-cli` to create projects based on user promp
    python run.py
    ```
 
+## Bot Permissions
+
+The bot requires these Discord permissions:
+- **Send Messages** - To send progress updates
+- **Read Message History** - To track session messages
+- **Attach Files** - To send refined prompt files
+- **Use Application Commands** - For slash commands
+- **Manage Messages** - To delete session messages after `/buildproject`
+
+To grant permissions, either re-invite the bot with updated OAuth2 scopes or configure the bot's role in Server Settings → Roles.
+
 ## GitHub Integration
 
 When enabled, the bot automatically:
-- Creates a new private GitHub repository for each project
+- Creates a new GitHub repository for each project (private if `GITHUB_REPO_PRIVATE=true`)
 - Copies the root `.gitignore` to ensure clean repositories
 - Pushes all generated files to the repository
 - Provides a direct link to the repository in the Discord summary
+- Optionally deletes local project folder after successful push (`CLEANUP_AFTER_PUSH=true` by default)
 
 To set up GitHub integration:
 1. Create a Personal Access Token at https://github.com/settings/tokens
@@ -60,9 +75,10 @@ See the file for available configuration options.
 ## Architecture Highlights
 
 - **Factory Pattern** - Bot instances are created via `get_bot()` factory function for better testability
-- **Explicit Initialization** - Configuration is loaded via `init_config()` at startup, not at import time
+- **Explicit Initialization** - Directory creation and config loading via `init_config()` at startup
 - **Modular Design** - Long command handlers are broken into focused helper functions
 - **Thread-Safe Buffers** - `AsyncOutputBuffer` class provides race-condition-free concurrent access
+- **Process Registry** - Centralized subprocess tracking for clean termination on shutdown
 - **Input Validation** - Prompt length and model name format are validated before processing
 - **Consistent Error Formatting** - All error messages use `format_error_message()` for uniform UX
 - **Singleton Logger** - Logger uses lazy initialization pattern to avoid import-time side effects

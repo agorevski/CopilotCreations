@@ -1,13 +1,14 @@
 # Discord Copilot Bot - Project Rules
 
 ## Project Overview
-This is a Discord bot written in Python that executes the `copilot` CLI to create projects based on user prompts. The bot provides real-time feedback through Discord messages showing file tree updates and command output.
+This is a Discord bot written in Python that executes the `copilot` CLI to create projects based on user prompts. The bot provides real-time feedback through Discord messages showing file tree updates and command output. It supports both quick single-command project creation and conversational AI-assisted prompt refinement.
 
 ## Tech Stack
 - Python 3.10+
 - discord.py (official Discord library)
 - python-dotenv for environment configuration
 - asyncio for concurrent subprocess handling
+- Azure OpenAI (optional) for AI-assisted prompt refinement
 
 ## Project Structure
 ```
@@ -15,6 +16,7 @@ discord-copilot-bot/
 ├── .env.example    # Template for environment variables
 ├── .env            # Actual environment variables (not in git)
 ├── .gitignore      # Git ignore rules
+├── config.yaml     # Prompt templates (createproject, prompt_refinement_system)
 ├── README.md       # Documentation
 ├── requirements.txt # Python dependencies
 ├── run.py          # Main bot entry point
@@ -22,8 +24,18 @@ discord-copilot-bot/
 │   ├── bot.py      # Discord bot client with factory pattern
 │   ├── config.py   # Configuration with explicit initialization
 │   ├── commands/   # Discord slash commands
-│   └── utils/      # Utility modules including async_buffer.py
-├── tests/          # Test suite
+│   │   ├── createproject.py      # /createproject command
+│   │   └── session_commands.py   # /startproject, /buildproject, /cancelprompt
+│   └── utils/      # Utility modules
+│       ├── async_buffer.py       # Thread-safe async output buffer
+│       ├── session_manager.py    # User session tracking
+│       ├── prompt_refinement.py  # AI-assisted prompt refinement
+│       ├── process_registry.py   # Subprocess tracking and cleanup
+│       ├── naming.py             # AI-powered repo naming
+│       ├── github.py             # GitHub integration
+│       └── ...
+├── tests/          # Test suite (317 tests, 75%+ coverage)
+├── docs/           # Documentation (USAGE.md, ARCHITECTURE.md)
 └── projects/       # Generated projects directory (not in git)
 ```
 
@@ -34,6 +46,7 @@ discord-copilot-bot/
 - **Factory Pattern** - Bot instances are created via `get_bot()` function
 - **Explicit Initialization** - Configuration is loaded via `init_config()` at startup
 - Async/await patterns throughout
+- **Required Permissions**: Send Messages, Read Message History, Attach Files, Use Application Commands, Manage Messages
 
 ### Subprocess Management
 - Uses `asyncio.create_subprocess_exec` for spawning copilot
@@ -43,12 +56,22 @@ discord-copilot-bot/
 
 ### Message Updates
 - **Unified Message** - Single Discord message with three sections updated every 3 seconds:
-  - Folder structure (max 750 characters)
-  - Copilot CLI output (max 2500 characters)
-  - Project creation summary with status, stats, and GitHub URL
+  - Folder structure (max 400 characters)
+  - Copilot CLI output (max 800 characters)
+  - Project creation summary with status, stats, and GitHub URL (max 500 characters)
 - Updates only when content changes (rate limit friendly)
 - **Thread-Safe Buffers** - `AsyncOutputBuffer` class for race-condition-free concurrent access
-- Log file attachment on completion
+- **Chat Cleanup** - Session messages deleted after `/buildproject` (requires Manage Messages permission)
+
+### AI-Assisted Prompt Refinement
+- **Conversational Flow** - `/startproject` → chat → `/buildproject`
+- **Session Management** - Tracks user messages and conversation history per channel
+- **12-Section Specifications** - AI generates exhaustive project specs covering:
+  - Project Overview, Tech Stack, Feature List with acceptance criteria
+  - Data Model, Architecture, Auth, Error Handling, Config/Env Vars
+  - Testing Requirements, Deployment/CI-CD, Non-Functional Requirements, Implementation Order
+- **Anti-Vagueness Rules** - Prompts explicitly forbid vague terms like "appropriate", "as needed"
+- **Message ID Tracking** - All session messages tracked for cleanup on build
 
 ### Code Organization
 - **Modular Functions** - Long command handlers are broken into focused helper functions
@@ -60,9 +83,21 @@ discord-copilot-bot/
 - `GITHUB_ENABLED` - Enable GitHub integration (default: false)
 - `GITHUB_TOKEN` - GitHub Personal Access Token
 - `GITHUB_USERNAME` - GitHub username
+- `GITHUB_REPO_PRIVATE` - Make repos private (default: false)
+- `CLEANUP_AFTER_PUSH` - Delete local folder after GitHub push (default: true)
+- `AZURE_OPENAI_ENDPOINT` - Azure OpenAI endpoint (optional, for AI refinement)
+- `AZURE_OPENAI_API_KEY` - Azure OpenAI API key (optional)
+- `AZURE_OPENAI_DEPLOYMENT_NAME` - Azure OpenAI deployment name (optional)
+- `AZURE_OPENAI_API_VERSION` - Azure OpenAI API version (default: 2025-01-01-preview)
+- `SESSION_TIMEOUT_MINUTES` - Session expiry time (default: 30)
+- `TIMEOUT_MINUTES` - Process timeout in minutes (default: 30)
+- `MAX_PARALLEL_REQUESTS` - Max parallel copilot requests (default: 2)
 
 ## Commands
-- `/createproject prompt:<text> [model:<model>]` - Main command
+- `/createproject prompt:<text> [model:<model>]` - Quick single-command project creation
+- `/startproject [description:<text>]` - Start conversational prompt-building session
+- `/buildproject [model:<model>]` - Finalize session and create project (deletes session messages)
+- `/cancelprompt` - Cancel active session
 
 ## Code Style
 - Use type hints for function parameters and return types
@@ -83,16 +118,26 @@ All magic numbers and strings should be defined in `src/config.py`:
 - `TIMEOUT_SECONDS` - Process timeout duration
 - `UPDATE_INTERVAL` - Unified message update interval (3 seconds)
 - `MAX_MESSAGE_LENGTH` - Discord message character limit
-- `MAX_FOLDER_STRUCTURE_LENGTH` - Max chars for folder structure section (750)
-- `MAX_COPILOT_OUTPUT_LENGTH` - Max chars for copilot output section (2500)
-- `MAX_PROMPT_LENGTH` - Maximum prompt length (10,000 chars)
+- `MAX_FOLDER_STRUCTURE_LENGTH` - Max chars for folder structure section (400)
+- `MAX_COPILOT_OUTPUT_LENGTH` - Max chars for copilot output section (800)
+- `MAX_SUMMARY_LENGTH` - Max chars for summary section (500)
+- `MAX_PROMPT_LENGTH` - Maximum prompt length (500,000 chars)
+- `MAX_PARALLEL_REQUESTS` - Max parallel copilot requests (2)
 - `MODEL_NAME_PATTERN` - Regex pattern for valid model names
+- `SESSION_TIMEOUT_MINUTES` - Session expiry time (30 minutes)
+
+## Prompt Templates (config.yaml)
+- `createproject` - Template prepended to all project creation prompts (CI/CD, tests, docs requirements)
+- `prompt_refinement_system` - System prompt for AI refinement assistant (4-round questioning, 12-section output)
+- `repository_naming_prompt` - Prompt for generating creative repo names
+- `repository_description_prompt` - Prompt for generating repo descriptions
 
 ## Testing
 - Test with Discord bot in a private server first
 - Verify concurrent command handling
 - Test timeout behavior with long-running prompts
 - Use `create_bot()` for test isolation (creates new instances)
+- Run: `python -m pytest tests/ -v --cov=src`
 
 ## Future Considerations
 - Docker integration planned for later
