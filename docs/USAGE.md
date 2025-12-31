@@ -166,6 +166,7 @@ Bot:  [Single unified message with real-time progress updates]
 | `AZURE_OPENAI_API_VERSION` | Azure OpenAI API version (default: 2025-01-01-preview) | No |
 | `SESSION_TIMEOUT_MINUTES` | Session expiry time (default: 30) | No |
 | `TIMEOUT_MINUTES` | Process timeout in minutes (default: 30) | No |
+| `GIT_OPERATION_TIMEOUT_SECONDS` | Git operation timeout in seconds (default: 300) | No |
 | `MAX_PARALLEL_REQUESTS` | Max parallel copilot requests (default: 2) | No |
 | `GITHUB_ENABLED` | Enable GitHub integration | No |
 | `GITHUB_TOKEN` | GitHub personal access token | No |

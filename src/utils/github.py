@@ -19,7 +19,8 @@ from ..config import (
     GITHUB_TOKEN,
     GITHUB_USERNAME,
     BASE_DIR,
-    GITHUB_ENABLED
+    GITHUB_ENABLED,
+    GIT_OPERATION_TIMEOUT_SECONDS
 )
 from .logging import logger
 
@@ -30,8 +31,8 @@ DISCORD_INVALID_WEBHOOK_TOKEN = 50027
 # GitHub constraints
 MAX_DESCRIPTION_LENGTH = 350
 
-# Git operation timeout in seconds
-GIT_OPERATION_TIMEOUT = 60
+# Git operation timeout in seconds (from config, default 5 minutes)
+GIT_OPERATION_TIMEOUT = GIT_OPERATION_TIMEOUT_SECONDS
 
 
 class RepositoryService(Protocol):

@@ -117,6 +117,9 @@ def is_initialized() -> bool:
 TIMEOUT_MINUTES = int(os.getenv("TIMEOUT_MINUTES", "30"))
 TIMEOUT_SECONDS = TIMEOUT_MINUTES * 60
 
+# Git operation timeout (default 5 minutes for large repos)
+GIT_OPERATION_TIMEOUT_SECONDS = int(os.getenv("GIT_OPERATION_TIMEOUT_SECONDS", "300"))
+
 # Parallelism Configuration
 MAX_PARALLEL_REQUESTS = int(os.getenv("MAX_PARALLEL_REQUESTS", "2"))
 

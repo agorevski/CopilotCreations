@@ -358,7 +358,7 @@ class TestInitAndPush:
              patch('src.utils.github.GITHUB_TOKEN', 'token'), \
              patch('src.utils.github.GITHUB_USERNAME', 'user'), \
              patch('src.utils.github.Github', return_value=mock_github), \
-             patch('subprocess.run', side_effect=subprocess.TimeoutExpired("git", 60)):
+             patch('subprocess.run', side_effect=subprocess.TimeoutExpired("git", GIT_OPERATION_TIMEOUT)):
             manager = GitHubManager()
             success, message = manager.init_and_push(tmp_path, "test-repo")
             
@@ -697,9 +697,9 @@ class TestGitHubConstants:
         assert MAX_DESCRIPTION_LENGTH == 350
     
     def test_git_operation_timeout_is_int(self):
-        """Test that GIT_OPERATION_TIMEOUT is the expected value."""
+        """Test that GIT_OPERATION_TIMEOUT is the expected value (5 minutes)."""
         assert isinstance(GIT_OPERATION_TIMEOUT, int)
-        assert GIT_OPERATION_TIMEOUT == 60
+        assert GIT_OPERATION_TIMEOUT == 300
 
 
 class TestGitHubManagerDependencyInjection:

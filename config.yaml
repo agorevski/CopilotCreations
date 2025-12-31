@@ -82,7 +82,7 @@ prompt_refinement_system: |
 
   ## Your Questioning Strategy
 
-  When a user describes a project idea, systematically probe ALL of these areas across 2-4 rounds of questions:
+  When a user describes a project idea, systematically probe ALL of these areas. Continue asking questions until you have gathered enough detail to produce an unambiguous specification—do NOT rush to the final prompt prematurely. Use as many rounds as needed:
 
   ### Round 1 - Core Requirements:
   1. **Exact functionality**: What specific actions should users be able to perform? List each feature as a concrete user story.
@@ -105,6 +105,16 @@ prompt_refinement_system: |
   12. **Edge cases**: What happens when X fails? Empty states? Concurrent access?
   13. **Configuration**: What should be configurable vs hardcoded? Default values?
   14. **Documentation**: API docs, README sections, inline comments expectations?
+
+  ### Round 5 - Depth & Future-Proofing:
+  15. **Domain complexity**: What are the core business rules that must NEVER be violated? Any complex calculations, state machines, or workflow logic?
+  16. **External integrations**: Third-party APIs, webhooks, message queues? What happens when they're unavailable (fallback strategies)?
+  17. **Scalability patterns**: Horizontal vs vertical scaling? Database sharding/partitioning? Event-driven architecture needs?
+  18. **Extensibility points**: What features might be added later? Plugin architecture? Feature flags for gradual rollouts?
+  19. **User experience patterns**: CLI output formatting? Progress indicators for long operations? Interactive prompts vs batch mode?
+  20. **Code quality gates**: Linting rules (strict or lenient)? Formatting standards? Pre-commit hooks? Type strictness level?
+  21. **Migration & versioning**: Database migration strategy? API versioning scheme? Backward compatibility requirements?
+  22. **Disaster recovery**: Data backup frequency? Rollback procedures? Audit logging for compliance?
 
   ## Question Guidelines:
   - Ask 3-5 targeted questions per round
@@ -167,7 +177,34 @@ prompt_refinement_system: |
   - Security: [specific measures]
   - Logging: [format and what to log]
 
-  ### 12. Implementation Order
+  ### 12. External Integrations & Fallbacks
+  - Third-party services: [list each with purpose]
+  - Fallback strategies: [what happens when each service is unavailable]
+  - Retry policies: [exponential backoff, circuit breaker patterns]
+
+  ### 13. Domain Rules & Business Logic
+  - Core invariants: [rules that must NEVER be violated]
+  - State machines: [if applicable, define states and transitions]
+  - Complex calculations: [formulas, algorithms with examples]
+
+  ### 14. Extensibility & Future-Proofing
+  - Plugin points: [where the system can be extended]
+  - Feature flags: [what features should be toggleable]
+  - API versioning: [v1, v2 strategy, deprecation policy]
+
+  ### 15. Code Quality Standards
+  - Linting: [tools and strictness level]
+  - Formatting: [style guide, auto-formatter]
+  - Pre-commit hooks: [checks to run before commits]
+  - Type safety: [strict mode, type coverage expectations]
+
+  ### 16. Migration & Recovery
+  - Database migrations: [tool, strategy for schema changes]
+  - Data backup: [frequency, retention policy]
+  - Rollback procedures: [how to revert bad deployments]
+  - Audit logging: [what actions to track for compliance]
+
+  ### 17. Implementation Order
   [Numbered list of what to build first, second, etc., with dependencies noted]
   ```
 
@@ -244,7 +281,34 @@ prompt_extraction: |
   - Security measures: [input validation, rate limiting, CORS, etc.]
   - Logging: [format, what to log, log levels]
 
-  ### 12. Implementation Order
+  ### 12. External Integrations & Fallbacks
+  - Third-party services: [list each with purpose]
+  - Fallback strategies: [what happens when each service is unavailable]
+  - Retry policies: [exponential backoff, circuit breaker patterns]
+
+  ### 13. Domain Rules & Business Logic
+  - Core invariants: [rules that must NEVER be violated]
+  - State machines: [if applicable, define states and transitions]
+  - Complex calculations: [formulas, algorithms with examples]
+
+  ### 14. Extensibility & Future-Proofing
+  - Plugin points: [where the system can be extended]
+  - Feature flags: [what features should be toggleable]
+  - API versioning: [v1, v2 strategy, deprecation policy]
+
+  ### 15. Code Quality Standards
+  - Linting: [tools and strictness level]
+  - Formatting: [style guide, auto-formatter]
+  - Pre-commit hooks: [checks to run before commits]
+  - Type safety: [strict mode, type coverage expectations]
+
+  ### 16. Migration & Recovery
+  - Database migrations: [tool, strategy for schema changes]
+  - Data backup: [frequency, retention policy]
+  - Rollback procedures: [how to revert bad deployments]
+  - Audit logging: [what actions to track for compliance]
+
+  ### 17. Implementation Order
   [Numbered sequence of what to build first, with dependencies noted]
 
   CRITICAL RULES:
