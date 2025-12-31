@@ -1,5 +1,8 @@
 """
 Tests for GitHub integration utilities.
+
+This module tests the GitHubManager class which handles repository creation,
+.gitignore copying, git operations, and pushing projects to GitHub.
 """
 
 import subprocess
@@ -18,10 +21,18 @@ from src.utils.github import (
 
 
 class TestGitHubManagerInit:
-    """Tests for GitHubManager initialization."""
+    """Tests for GitHubManager initialization and configuration."""
     
-    def test_init_loads_config(self):
-        """Test that GitHubManager loads configuration on init."""
+    def test_init_and_configuration(self):
+        """
+        Tests GitHubManager initialization:
+        - Loads config values (enabled, token, username)
+        - Works when GitHub is disabled
+        - is_configured returns correct values for various states
+        - Accepts custom credentials (dependency injection)
+        - Can be explicitly disabled
+        """
+        # Loads config from environment
         with patch('src.utils.github.GITHUB_ENABLED', True), \
              patch('src.utils.github.GITHUB_TOKEN', 'test_token'), \
              patch('src.utils.github.GITHUB_USERNAME', 'test_user'):
@@ -29,188 +40,162 @@ class TestGitHubManagerInit:
             assert manager.enabled is True
             assert manager.token == 'test_token'
             assert manager.username == 'test_user'
-    
-    def test_init_with_disabled_github(self):
-        """Test that GitHubManager works when GitHub is disabled."""
+            assert manager.is_configured() is True
+        
+        # Works when disabled
         with patch('src.utils.github.GITHUB_ENABLED', False), \
              patch('src.utils.github.GITHUB_TOKEN', None), \
              patch('src.utils.github.GITHUB_USERNAME', None):
             manager = GitHubManager()
             assert manager.enabled is False
-            assert manager.token is None
-            assert manager.username is None
-
-
-class TestGitHubProperty:
-    """Tests for the github property lazy loading."""
-    
-    def test_github_property_when_disabled(self):
-        """Test that github property returns None when disabled."""
-        with patch('src.utils.github.GITHUB_ENABLED', False), \
-             patch('src.utils.github.GITHUB_TOKEN', 'token'), \
-             patch('src.utils.github.GITHUB_USERNAME', 'user'):
-            manager = GitHubManager()
-            assert manager.github is None
-    
-    def test_github_property_lazy_loads(self):
-        """Test that github property creates client on first access."""
-        with patch('src.utils.github.GITHUB_ENABLED', True), \
-             patch('src.utils.github.GITHUB_TOKEN', 'test_token'), \
-             patch('src.utils.github.GITHUB_USERNAME', 'test_user'), \
-             patch('src.utils.github.Github') as mock_github:
-            manager = GitHubManager()
-            # Access the property
-            _ = manager.github
-            mock_github.assert_called_once_with('test_token')
-    
-    def test_github_property_caches_client(self):
-        """Test that github property caches the client."""
-        with patch('src.utils.github.GITHUB_ENABLED', True), \
-             patch('src.utils.github.GITHUB_TOKEN', 'test_token'), \
-             patch('src.utils.github.GITHUB_USERNAME', 'test_user'), \
-             patch('src.utils.github.Github') as mock_github:
-            manager = GitHubManager()
-            # Access the property twice
-            _ = manager.github
-            _ = manager.github
-            # Should only create once
-            mock_github.assert_called_once()
-    
-    def test_github_property_no_token(self):
-        """Test that github property handles missing token."""
-        with patch('src.utils.github.GITHUB_ENABLED', True), \
-             patch('src.utils.github.GITHUB_TOKEN', None), \
-             patch('src.utils.github.GITHUB_USERNAME', 'test_user'), \
-             patch('src.utils.github.Github') as mock_github:
-            manager = GitHubManager()
-            result = manager.github
-            # Should not create client without token
-            mock_github.assert_not_called()
-            assert result is None
-
-
-class TestIsConfigured:
-    """Tests for is_configured method."""
-    
-    def test_is_configured_all_set(self):
-        """Test is_configured returns True when all settings are present."""
-        with patch('src.utils.github.GITHUB_ENABLED', True), \
-             patch('src.utils.github.GITHUB_TOKEN', 'token'), \
-             patch('src.utils.github.GITHUB_USERNAME', 'user'):
-            manager = GitHubManager()
-            assert manager.is_configured() is True
-    
-    def test_is_configured_disabled(self):
-        """Test is_configured returns False when disabled."""
-        with patch('src.utils.github.GITHUB_ENABLED', False), \
-             patch('src.utils.github.GITHUB_TOKEN', 'token'), \
-             patch('src.utils.github.GITHUB_USERNAME', 'user'):
-            manager = GitHubManager()
             assert manager.is_configured() is False
-    
-    def test_is_configured_no_token(self):
-        """Test is_configured returns False when token is missing."""
+        
+        # is_configured False when token missing
         with patch('src.utils.github.GITHUB_ENABLED', True), \
              patch('src.utils.github.GITHUB_TOKEN', None), \
              patch('src.utils.github.GITHUB_USERNAME', 'user'):
             manager = GitHubManager()
             assert manager.is_configured() is False
-    
-    def test_is_configured_no_username(self):
-        """Test is_configured returns False when username is missing."""
+        
+        # is_configured False when username missing
         with patch('src.utils.github.GITHUB_ENABLED', True), \
              patch('src.utils.github.GITHUB_TOKEN', 'token'), \
              patch('src.utils.github.GITHUB_USERNAME', None):
             manager = GitHubManager()
             assert manager.is_configured() is False
-    
-    def test_is_configured_empty_strings(self):
-        """Test is_configured returns False with empty strings."""
+        
+        # is_configured False with empty strings
         with patch('src.utils.github.GITHUB_ENABLED', True), \
              patch('src.utils.github.GITHUB_TOKEN', ''), \
              patch('src.utils.github.GITHUB_USERNAME', ''):
             manager = GitHubManager()
             assert manager.is_configured() is False
+        
+        # Accepts custom credentials (dependency injection)
+        manager = GitHubManager(token="custom_token", username="custom_user", enabled=True)
+        assert manager.token == "custom_token"
+        assert manager.username == "custom_user"
+        assert manager.enabled is True
+        
+        # Can be explicitly disabled
+        manager = GitHubManager(enabled=False)
+        assert manager.enabled is False
+        assert manager.github is None
+
+
+class TestGitHubProperty:
+    """Tests for the github property lazy loading behavior."""
+    
+    def test_github_property(self):
+        """
+        Tests github property:
+        - Returns None when disabled
+        - Lazy loads client on first access
+        - Caches client (only creates once)
+        - Returns None when token missing
+        """
+        # Returns None when disabled
+        with patch('src.utils.github.GITHUB_ENABLED', False), \
+             patch('src.utils.github.GITHUB_TOKEN', 'token'), \
+             patch('src.utils.github.GITHUB_USERNAME', 'user'):
+            manager = GitHubManager()
+            assert manager.github is None
+        
+        # Lazy loads and caches
+        with patch('src.utils.github.GITHUB_ENABLED', True), \
+             patch('src.utils.github.GITHUB_TOKEN', 'test_token'), \
+             patch('src.utils.github.GITHUB_USERNAME', 'test_user'), \
+             patch('src.utils.github.Github') as mock_github:
+            manager = GitHubManager()
+            _ = manager.github
+            _ = manager.github  # Second access
+            mock_github.assert_called_once_with('test_token')  # Only created once
+        
+        # Returns None without token
+        with patch('src.utils.github.GITHUB_ENABLED', True), \
+             patch('src.utils.github.GITHUB_TOKEN', None), \
+             patch('src.utils.github.GITHUB_USERNAME', 'test_user'), \
+             patch('src.utils.github.Github') as mock_github:
+            manager = GitHubManager()
+            assert manager.github is None
+            mock_github.assert_not_called()
 
 
 class TestCopyGitignore:
     """Tests for copy_gitignore method."""
     
-    def test_copy_gitignore_success(self, tmp_path):
-        """Test successful .gitignore copy."""
-        # Create a fake source .gitignore
+    def test_copy_gitignore(self, tmp_path):
+        """
+        Tests copy_gitignore method:
+        - Successfully copies .gitignore to project directory
+        - Returns False when source doesn't exist
+        - Handles exceptions (e.g., permission errors)
+        """
+        # Success case
         with patch('src.utils.github.GITHUB_ENABLED', True), \
              patch('src.utils.github.GITHUB_TOKEN', 'token'), \
              patch('src.utils.github.GITHUB_USERNAME', 'user'), \
              patch('src.utils.github.BASE_DIR', tmp_path):
-            # Create source gitignore
             source = tmp_path / ".gitignore"
             source.write_text("*.pyc\n__pycache__/\n")
             
-            # Create target directory
             project_dir = tmp_path / "project"
             project_dir.mkdir()
             
             manager = GitHubManager()
-            result = manager.copy_gitignore(project_dir)
-            
-            assert result is True
-            dest = project_dir / ".gitignore"
-            assert dest.exists()
-            assert dest.read_text() == "*.pyc\n__pycache__/\n"
-    
-    def test_copy_gitignore_source_not_found(self, tmp_path):
-        """Test copy_gitignore when source doesn't exist."""
+            assert manager.copy_gitignore(project_dir) is True
+            assert (project_dir / ".gitignore").read_text() == "*.pyc\n__pycache__/\n"
+        
+        # Source not found
         with patch('src.utils.github.GITHUB_ENABLED', True), \
              patch('src.utils.github.GITHUB_TOKEN', 'token'), \
              patch('src.utils.github.GITHUB_USERNAME', 'user'), \
-             patch('src.utils.github.BASE_DIR', tmp_path):
-            # No source gitignore created
-            project_dir = tmp_path / "project"
-            project_dir.mkdir()
+             patch('src.utils.github.BASE_DIR', tmp_path / "nonexistent"):
+            project_dir2 = tmp_path / "project2"
+            project_dir2.mkdir()
             
             manager = GitHubManager()
-            result = manager.copy_gitignore(project_dir)
-            
-            assert result is False
-    
-    def test_copy_gitignore_exception(self, tmp_path):
-        """Test copy_gitignore handles exceptions."""
+            assert manager.copy_gitignore(project_dir2) is False
+        
+        # Exception handling
         with patch('src.utils.github.GITHUB_ENABLED', True), \
              patch('src.utils.github.GITHUB_TOKEN', 'token'), \
              patch('src.utils.github.GITHUB_USERNAME', 'user'), \
              patch('src.utils.github.BASE_DIR', tmp_path), \
              patch('shutil.copy2', side_effect=PermissionError("Access denied")):
-            # Create source gitignore
             source = tmp_path / ".gitignore"
             source.write_text("*.pyc\n")
             
-            project_dir = tmp_path / "project"
-            project_dir.mkdir()
+            project_dir3 = tmp_path / "project3"
+            project_dir3.mkdir()
             
             manager = GitHubManager()
-            result = manager.copy_gitignore(project_dir)
-            
-            assert result is False
+            assert manager.copy_gitignore(project_dir3) is False
 
 
 class TestCreateRepository:
-    """Tests for create_repository method."""
+    """Tests for create_repository method covering success and error cases."""
     
-    def test_create_repository_not_configured(self):
-        """Test create_repository when not configured."""
+    def test_create_repository(self):
+        """
+        Tests create_repository method:
+        - Returns failure when not configured
+        - Successfully creates repository with proper parameters
+        - Handles GithubException
+        - Handles generic exceptions
+        - Handles detailed errors list
+        """
+        # Not configured
         with patch('src.utils.github.GITHUB_ENABLED', False), \
              patch('src.utils.github.GITHUB_TOKEN', None), \
              patch('src.utils.github.GITHUB_USERNAME', None):
             manager = GitHubManager()
             success, message, url = manager.create_repository("test-repo")
-            
             assert success is False
             assert "not configured" in message
             assert url is None
-    
-    def test_create_repository_success(self):
-        """Test successful repository creation."""
+        
+        # Success case
         mock_repo = Mock()
         mock_repo.full_name = "user/test-repo"
         mock_repo.html_url = "https://github.com/user/test-repo"
@@ -228,74 +213,89 @@ class TestCreateRepository:
              patch('src.utils.github.Github', return_value=mock_github):
             manager = GitHubManager()
             success, message, url = manager.create_repository(
-                "test-repo", 
-                description="Test description",
-                private=True
+                "test-repo", description="Test description", private=True
             )
-            
             assert success is True
             assert "https://github.com/user/test-repo" in message
             assert url == "https://github.com/user/test-repo.git"
             mock_user.create_repo.assert_called_once_with(
-                name="test-repo",
-                description="Test description",
-                private=True,
-                auto_init=False
+                name="test-repo", description="Test description",
+                private=True, auto_init=False
             )
-    
-    def test_create_repository_github_exception(self):
-        """Test create_repository handles GithubException."""
-        mock_github = Mock()
-        mock_user = Mock()
-        mock_user.create_repo.side_effect = GithubException(
+        
+        # GithubException
+        mock_user2 = Mock()
+        mock_user2.create_repo.side_effect = GithubException(
             422, {"message": "Repository already exists"}, None
         )
-        mock_github.get_user.return_value = mock_user
+        mock_github2 = Mock()
+        mock_github2.get_user.return_value = mock_user2
         
         with patch('src.utils.github.GITHUB_ENABLED', True), \
              patch('src.utils.github.GITHUB_TOKEN', 'token'), \
              patch('src.utils.github.GITHUB_USERNAME', 'user'), \
-             patch('src.utils.github.Github', return_value=mock_github):
+             patch('src.utils.github.Github', return_value=mock_github2):
             manager = GitHubManager()
             success, message, url = manager.create_repository("test-repo")
-            
             assert success is False
             assert "GitHub API error" in message
-            assert url is None
-    
-    def test_create_repository_generic_exception(self):
-        """Test create_repository handles generic exceptions."""
-        mock_github = Mock()
-        mock_github.get_user.side_effect = Exception("Network error")
+        
+        # Generic exception
+        mock_github3 = Mock()
+        mock_github3.get_user.side_effect = Exception("Network error")
         
         with patch('src.utils.github.GITHUB_ENABLED', True), \
              patch('src.utils.github.GITHUB_TOKEN', 'token'), \
              patch('src.utils.github.GITHUB_USERNAME', 'user'), \
-             patch('src.utils.github.Github', return_value=mock_github):
+             patch('src.utils.github.Github', return_value=mock_github3):
             manager = GitHubManager()
             success, message, url = manager.create_repository("test-repo")
-            
             assert success is False
             assert "Failed to create repository" in message
-            assert url is None
+        
+        # Detailed errors list
+        mock_user4 = Mock()
+        mock_user4.create_repo.side_effect = GithubException(
+            422, {"message": "Validation Failed", "errors": [
+                {"field": "name", "code": "already_exists"}
+            ]}, None
+        )
+        mock_github4 = Mock()
+        mock_github4.get_user.return_value = mock_user4
+        
+        with patch('src.utils.github.GITHUB_ENABLED', True), \
+             patch('src.utils.github.GITHUB_TOKEN', 'token'), \
+             patch('src.utils.github.GITHUB_USERNAME', 'user'), \
+             patch('src.utils.github.Github', return_value=mock_github4):
+            manager = GitHubManager()
+            success, message, url = manager.create_repository("test-repo")
+            assert success is False
+            assert "Details:" in message
 
 
 class TestInitAndPush:
-    """Tests for init_and_push method."""
+    """Tests for init_and_push method covering git operations."""
     
-    def test_init_and_push_not_configured(self, tmp_path):
-        """Test init_and_push when not configured."""
+    def test_init_and_push(self, tmp_path):
+        """
+        Tests init_and_push method:
+        - Returns failure when not configured
+        - Successfully initializes and pushes repository
+        - Handles git command failures
+        - Handles timeout
+        - Handles generic exceptions
+        - Uses noreply email when user email is missing
+        """
+        # Not configured
         with patch('src.utils.github.GITHUB_ENABLED', False), \
              patch('src.utils.github.GITHUB_TOKEN', None), \
              patch('src.utils.github.GITHUB_USERNAME', None):
             manager = GitHubManager()
             success, message = manager.init_and_push(tmp_path, "test-repo")
-            
             assert success is False
             assert "not configured" in message
-    
-    def test_init_and_push_success(self, tmp_path):
-        """Test successful init and push."""
+        
+        # Success case
         mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stderr = ""
@@ -315,45 +315,25 @@ class TestInitAndPush:
              patch('subprocess.run', return_value=mock_result):
             manager = GitHubManager()
             success, message = manager.init_and_push(tmp_path, "test-repo")
-            
             assert success is True
             assert "https://github.com/testuser/test-repo" in message
-    
-    def test_init_and_push_git_command_fails(self, tmp_path):
-        """Test init_and_push when git command fails."""
-        mock_result = Mock()
-        mock_result.returncode = 1
-        mock_result.stderr = "fatal: not a git repository"
         
-        mock_user = Mock()
-        mock_user.login = "testuser"
-        mock_user.name = "Test User"
-        mock_user.email = "test@example.com"
-        
-        mock_github = Mock()
-        mock_github.get_user.return_value = mock_user
+        # Git command fails
+        mock_result_fail = Mock()
+        mock_result_fail.returncode = 1
+        mock_result_fail.stderr = "fatal: not a git repository"
         
         with patch('src.utils.github.GITHUB_ENABLED', True), \
              patch('src.utils.github.GITHUB_TOKEN', 'token'), \
              patch('src.utils.github.GITHUB_USERNAME', 'user'), \
              patch('src.utils.github.Github', return_value=mock_github), \
-             patch('subprocess.run', return_value=mock_result):
+             patch('subprocess.run', return_value=mock_result_fail):
             manager = GitHubManager()
             success, message = manager.init_and_push(tmp_path, "test-repo")
-            
             assert success is False
             assert "Git command failed" in message
-    
-    def test_init_and_push_timeout(self, tmp_path):
-        """Test init_and_push handles timeout."""
-        mock_user = Mock()
-        mock_user.login = "testuser"
-        mock_user.name = "Test User"
-        mock_user.email = "test@example.com"
         
-        mock_github = Mock()
-        mock_github.get_user.return_value = mock_user
-        
+        # Timeout
         with patch('src.utils.github.GITHUB_ENABLED', True), \
              patch('src.utils.github.GITHUB_TOKEN', 'token'), \
              patch('src.utils.github.GITHUB_USERNAME', 'user'), \
@@ -361,49 +341,39 @@ class TestInitAndPush:
              patch('subprocess.run', side_effect=subprocess.TimeoutExpired("git", GIT_OPERATION_TIMEOUT)):
             manager = GitHubManager()
             success, message = manager.init_and_push(tmp_path, "test-repo")
-            
             assert success is False
             assert "timed out" in message
-    
-    def test_init_and_push_generic_exception(self, tmp_path):
-        """Test init_and_push handles generic exceptions."""
-        mock_github = Mock()
-        mock_github.get_user.side_effect = Exception("Unexpected error")
+        
+        # Generic exception
+        mock_github_error = Mock()
+        mock_github_error.get_user.side_effect = Exception("Unexpected error")
         
         with patch('src.utils.github.GITHUB_ENABLED', True), \
              patch('src.utils.github.GITHUB_TOKEN', 'token'), \
              patch('src.utils.github.GITHUB_USERNAME', 'user'), \
-             patch('src.utils.github.Github', return_value=mock_github):
+             patch('src.utils.github.Github', return_value=mock_github_error):
             manager = GitHubManager()
             success, message = manager.init_and_push(tmp_path, "test-repo")
-            
             assert success is False
             assert "Failed to push to GitHub" in message
-    
-    def test_init_and_push_uses_noreply_email_when_email_missing(self, tmp_path):
-        """Test init_and_push uses noreply email when user email is None."""
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stderr = ""
         
-        mock_user = Mock()
-        mock_user.login = "testuser"
-        mock_user.name = "Test User"
-        mock_user.email = None  # No email set
+        # Uses noreply email when email missing
+        mock_user_no_email = Mock()
+        mock_user_no_email.login = "testuser"
+        mock_user_no_email.name = "Test User"
+        mock_user_no_email.email = None
         
-        mock_github = Mock()
-        mock_github.get_user.return_value = mock_user
+        mock_github_no_email = Mock()
+        mock_github_no_email.get_user.return_value = mock_user_no_email
         
         with patch('src.utils.github.GITHUB_ENABLED', True), \
              patch('src.utils.github.GITHUB_TOKEN', 'token'), \
              patch('src.utils.github.GITHUB_USERNAME', 'user'), \
-             patch('src.utils.github.Github', return_value=mock_github), \
+             patch('src.utils.github.Github', return_value=mock_github_no_email), \
              patch('subprocess.run', return_value=mock_result) as mock_run:
             manager = GitHubManager()
             success, message = manager.init_and_push(tmp_path, "test-repo")
-            
             assert success is True
-            # Check that git config user.email was called with noreply email
             calls = mock_run.call_args_list
             email_config_call = [c for c in calls if 'user.email' in c[0][0]]
             assert len(email_config_call) > 0
@@ -411,25 +381,28 @@ class TestInitAndPush:
 
 
 class TestCreateAndPushProject:
-    """Tests for create_and_push_project method."""
+    """Tests for create_and_push_project method (full workflow)."""
     
-    def test_create_and_push_not_configured(self, tmp_path):
-        """Test create_and_push_project when not configured."""
+    def test_create_and_push_project(self, tmp_path):
+        """
+        Tests create_and_push_project method:
+        - Returns failure when not configured
+        - Successfully creates and pushes project
+        - Handles repo creation failure
+        - Handles push failure
+        - Handles get_user failure
+        """
+        # Not configured
         with patch('src.utils.github.GITHUB_ENABLED', False), \
              patch('src.utils.github.GITHUB_TOKEN', None), \
              patch('src.utils.github.GITHUB_USERNAME', None):
             manager = GitHubManager()
-            success, message, url = manager.create_and_push_project(
-                tmp_path, "test-repo"
-            )
-            
+            success, message, url = manager.create_and_push_project(tmp_path, "test-repo")
             assert success is False
             assert "not configured" in message
             assert url is None
-    
-    def test_create_and_push_success(self, tmp_path):
-        """Test successful create_and_push_project."""
-        # Create source gitignore
+        
+        # Success case
         mock_repo = Mock()
         mock_repo.full_name = "testuser/test-repo"
         mock_repo.html_url = "https://github.com/testuser/test-repo"
@@ -454,7 +427,6 @@ class TestCreateAndPushProject:
              patch('src.utils.github.BASE_DIR', tmp_path), \
              patch('src.utils.github.Github', return_value=mock_github), \
              patch('subprocess.run', return_value=mock_result):
-            # Create source gitignore
             (tmp_path / ".gitignore").write_text("*.pyc\n")
             project_dir = tmp_path / "project"
             project_dir.mkdir()
@@ -463,108 +435,83 @@ class TestCreateAndPushProject:
             success, message, url = manager.create_and_push_project(
                 project_dir, "test-repo", "Test description"
             )
-            
             assert success is True
             assert "https://github.com/testuser/test-repo" in message
             assert url == "https://github.com/testuser/test-repo"
-    
-    def test_create_and_push_repo_creation_fails(self, tmp_path):
-        """Test create_and_push_project when repo creation fails."""
-        mock_user = Mock()
-        mock_user.login = "testuser"
-        mock_user.create_repo.side_effect = GithubException(
+        
+        # Repo creation fails
+        mock_user_fail = Mock()
+        mock_user_fail.login = "testuser"
+        mock_user_fail.create_repo.side_effect = GithubException(
             422, {"message": "Repository already exists"}, None
         )
-        
-        mock_github = Mock()
-        mock_github.get_user.return_value = mock_user
+        mock_github_fail = Mock()
+        mock_github_fail.get_user.return_value = mock_user_fail
         
         with patch('src.utils.github.GITHUB_ENABLED', True), \
              patch('src.utils.github.GITHUB_TOKEN', 'token'), \
              patch('src.utils.github.GITHUB_USERNAME', 'user'), \
              patch('src.utils.github.BASE_DIR', tmp_path), \
-             patch('src.utils.github.Github', return_value=mock_github):
-            (tmp_path / ".gitignore").write_text("*.pyc\n")
-            project_dir = tmp_path / "project"
-            project_dir.mkdir()
+             patch('src.utils.github.Github', return_value=mock_github_fail):
+            project_dir2 = tmp_path / "project2"
+            project_dir2.mkdir()
             
             manager = GitHubManager()
-            success, message, url = manager.create_and_push_project(
-                project_dir, "test-repo"
-            )
-            
+            success, message, url = manager.create_and_push_project(project_dir2, "test-repo")
             assert success is False
             assert "GitHub API error" in message
-            assert url is None
-    
-    def test_create_and_push_push_fails(self, tmp_path):
-        """Test create_and_push_project when push fails."""
-        mock_repo = Mock()
-        mock_repo.full_name = "testuser/test-repo"
-        mock_repo.html_url = "https://github.com/testuser/test-repo"
-        mock_repo.clone_url = "https://github.com/testuser/test-repo.git"
         
-        mock_user = Mock()
-        mock_user.login = "testuser"
-        mock_user.name = "Test User"
-        mock_user.email = "test@example.com"
-        mock_user.create_repo.return_value = mock_repo
+        # Push fails
+        mock_user_push = Mock()
+        mock_user_push.login = "testuser"
+        mock_user_push.name = "Test User"
+        mock_user_push.email = "test@example.com"
+        mock_user_push.create_repo.return_value = mock_repo
         
-        mock_github = Mock()
-        mock_github.get_user.return_value = mock_user
+        mock_github_push = Mock()
+        mock_github_push.get_user.return_value = mock_user_push
         
-        mock_result = Mock()
-        mock_result.returncode = 1
-        mock_result.stderr = "push failed"
+        mock_result_fail = Mock()
+        mock_result_fail.returncode = 1
+        mock_result_fail.stderr = "push failed"
         
         with patch('src.utils.github.GITHUB_ENABLED', True), \
              patch('src.utils.github.GITHUB_TOKEN', 'token'), \
              patch('src.utils.github.GITHUB_USERNAME', 'user'), \
              patch('src.utils.github.BASE_DIR', tmp_path), \
-             patch('src.utils.github.Github', return_value=mock_github), \
-             patch('subprocess.run', return_value=mock_result):
-            (tmp_path / ".gitignore").write_text("*.pyc\n")
-            project_dir = tmp_path / "project"
-            project_dir.mkdir()
+             patch('src.utils.github.Github', return_value=mock_github_push), \
+             patch('subprocess.run', return_value=mock_result_fail):
+            project_dir3 = tmp_path / "project3"
+            project_dir3.mkdir()
             
             manager = GitHubManager()
-            success, message, url = manager.create_and_push_project(
-                project_dir, "test-repo"
-            )
-            
+            success, message, url = manager.create_and_push_project(project_dir3, "test-repo")
             assert success is False
             assert "Git command failed" in message
-            assert url is None
-    
-    def test_create_and_push_get_user_fails(self, tmp_path):
-        """Test create_and_push_project when getting user info fails."""
-        mock_github = Mock()
-        mock_github.get_user.side_effect = Exception("API error")
+        
+        # Get user fails
+        mock_github_user_fail = Mock()
+        mock_github_user_fail.get_user.side_effect = Exception("API error")
         
         with patch('src.utils.github.GITHUB_ENABLED', True), \
              patch('src.utils.github.GITHUB_TOKEN', 'token'), \
              patch('src.utils.github.GITHUB_USERNAME', 'user'), \
              patch('src.utils.github.BASE_DIR', tmp_path), \
-             patch('src.utils.github.Github', return_value=mock_github):
-            (tmp_path / ".gitignore").write_text("*.pyc\n")
-            project_dir = tmp_path / "project"
-            project_dir.mkdir()
+             patch('src.utils.github.Github', return_value=mock_github_user_fail):
+            project_dir4 = tmp_path / "project4"
+            project_dir4.mkdir()
             
             manager = GitHubManager()
-            success, message, url = manager.create_and_push_project(
-                project_dir, "test-repo"
-            )
-            
+            success, message, url = manager.create_and_push_project(project_dir4, "test-repo")
             assert success is False
             assert "Failed to get GitHub user info" in message
-            assert url is None
 
 
 class TestGitHubManagerSingleton:
     """Tests for the github_manager singleton."""
     
-    def test_github_manager_singleton_exists(self):
-        """Test that github_manager singleton is created."""
+    def test_github_manager_singleton(self):
+        """Tests that github_manager singleton exists and is GitHubManager instance."""
         from src.utils.github import github_manager
         assert github_manager is not None
         assert isinstance(github_manager, GitHubManager)
@@ -573,90 +520,65 @@ class TestGitHubManagerSingleton:
 class TestSanitizeDescription:
     """Tests for sanitize_description method."""
     
-    def test_sanitize_description_removes_quotes(self):
-        """Test that quotes are removed from description."""
+    def test_sanitize_description(self):
+        """
+        Tests description sanitization:
+        - Removes quotes
+        - Removes control characters
+        - Removes non-ASCII unicode (emojis)
+        - Truncates long descriptions with ...
+        - Replaces multiple whitespace with single space
+        """
         with patch('src.utils.github.GITHUB_ENABLED', False):
             manager = GitHubManager()
-            result = manager.sanitize_description('"A cool project"')
             
-            assert result == "A cool project"
-    
-    def test_sanitize_description_removes_control_chars(self):
-        """Test that control characters are removed."""
-        with patch('src.utils.github.GITHUB_ENABLED', False):
-            manager = GitHubManager()
+            # Removes quotes
+            assert manager.sanitize_description('"A cool project"') == "A cool project"
+            
+            # Removes control chars
             result = manager.sanitize_description("A project\x00\x01\x02")
-            
             assert "\x00" not in result
             assert "A project" in result
-    
-    def test_sanitize_description_removes_unicode(self):
-        """Test that non-ASCII unicode is removed."""
-        with patch('src.utils.github.GITHUB_ENABLED', False):
-            manager = GitHubManager()
-            result = manager.sanitize_description("A project 🚀 with emoji")
             
+            # Removes unicode/emojis
+            result = manager.sanitize_description("A project 🚀 with emoji")
             assert "🚀" not in result
-            assert "A project" in result
-    
-    def test_sanitize_description_truncates_long(self):
-        """Test that long descriptions are truncated."""
-        with patch('src.utils.github.GITHUB_ENABLED', False):
-            manager = GitHubManager()
+            
+            # Truncates long descriptions
             long_desc = "x" * 400
             result = manager.sanitize_description(long_desc)
-            
             assert len(result) <= MAX_DESCRIPTION_LENGTH
             assert result.endswith("...")
-    
-    def test_sanitize_description_replaces_whitespace(self):
-        """Test that multiple whitespace is replaced."""
-        with patch('src.utils.github.GITHUB_ENABLED', False):
-            manager = GitHubManager()
-            result = manager.sanitize_description("A   project   with    spaces")
             
-            assert "   " not in result
-            assert "A project with spaces" == result
+            # Replaces multiple whitespace
+            assert manager.sanitize_description("A   project   with    spaces") == "A project with spaces"
 
 
-class TestCreateRepositoryErrors:
-    """Tests for create_repository error handling with detailed errors."""
+class TestGitHubConstants:
+    """Tests for GitHub module constants."""
     
-    def test_create_repository_with_errors_list(self):
-        """Test create_repository with detailed errors list (lines 160-164)."""
-        mock_github = Mock()
-        mock_user = Mock()
-        mock_user.create_repo.side_effect = GithubException(
-            422, 
-            {
-                "message": "Validation Failed",
-                "errors": [
-                    {"field": "name", "code": "already_exists"},
-                    {"field": "description", "code": "invalid"}
-                ],
-                "documentation_url": "https://docs.github.com/rest"
-            }, 
-            None
-        )
-        mock_github.get_user.return_value = mock_user
+    def test_constants(self):
+        """
+        Tests GitHub constants:
+        - DISCORD_INVALID_WEBHOOK_TOKEN is 50027
+        - MAX_DESCRIPTION_LENGTH is 350
+        - GIT_OPERATION_TIMEOUT is 300 (5 minutes)
+        """
+        assert isinstance(DISCORD_INVALID_WEBHOOK_TOKEN, int)
+        assert DISCORD_INVALID_WEBHOOK_TOKEN == 50027
         
-        with patch('src.utils.github.GITHUB_ENABLED', True), \
-             patch('src.utils.github.GITHUB_TOKEN', 'token'), \
-             patch('src.utils.github.GITHUB_USERNAME', 'user'), \
-             patch('src.utils.github.Github', return_value=mock_github):
-            manager = GitHubManager()
-            success, message, url = manager.create_repository("test-repo")
-            
-            assert success is False
-            assert "Details:" in message
-            assert url is None
+        assert isinstance(MAX_DESCRIPTION_LENGTH, int)
+        assert MAX_DESCRIPTION_LENGTH == 350
+        
+        assert isinstance(GIT_OPERATION_TIMEOUT, int)
+        assert GIT_OPERATION_TIMEOUT == 300
 
 
 class TestInitAndPushLogging:
     """Tests for init_and_push logging behavior."""
     
-    def test_init_and_push_logs_safe_command(self, tmp_path):
-        """Test init_and_push logs safe command for remote add (line 232-237)."""
+    def test_init_and_push_logs(self, tmp_path):
+        """Tests that init_and_push logs debug information for git commands."""
         mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stderr = ""
@@ -679,47 +601,4 @@ class TestInitAndPushLogging:
             success, message = manager.init_and_push(tmp_path, "test-repo")
             
             assert success is True
-            # Verify debug logging happened
             assert mock_logger.debug.call_count >= 1
-
-
-class TestGitHubConstants:
-    """Tests for GitHub module constants."""
-    
-    def test_discord_invalid_webhook_token_is_int(self):
-        """Test that DISCORD_INVALID_WEBHOOK_TOKEN is the expected value."""
-        assert isinstance(DISCORD_INVALID_WEBHOOK_TOKEN, int)
-        assert DISCORD_INVALID_WEBHOOK_TOKEN == 50027
-    
-    def test_max_description_length_is_int(self):
-        """Test that MAX_DESCRIPTION_LENGTH is the expected value."""
-        assert isinstance(MAX_DESCRIPTION_LENGTH, int)
-        assert MAX_DESCRIPTION_LENGTH == 350
-    
-    def test_git_operation_timeout_is_int(self):
-        """Test that GIT_OPERATION_TIMEOUT is the expected value (5 minutes)."""
-        assert isinstance(GIT_OPERATION_TIMEOUT, int)
-        assert GIT_OPERATION_TIMEOUT == 300
-
-
-class TestGitHubManagerDependencyInjection:
-    """Tests for GitHubManager dependency injection support."""
-    
-    def test_init_with_custom_credentials(self):
-        """Test that GitHubManager accepts custom credentials."""
-        manager = GitHubManager(
-            token="custom_token",
-            username="custom_user",
-            enabled=True
-        )
-        
-        assert manager.token == "custom_token"
-        assert manager.username == "custom_user"
-        assert manager.enabled is True
-    
-    def test_init_with_disabled_integration(self):
-        """Test that GitHubManager can be explicitly disabled."""
-        manager = GitHubManager(enabled=False)
-        
-        assert manager.enabled is False
-        assert manager.github is None

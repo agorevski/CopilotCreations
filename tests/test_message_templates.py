@@ -1,5 +1,8 @@
 """
 Tests for message templates module.
+
+This module tests the MessageTemplates class which provides formatted
+message strings for Discord bot responses and ProjectSummary dataclass.
 """
 
 import pytest
@@ -8,50 +11,49 @@ from src.utils.message_templates import MessageTemplates, ProjectSummary
 
 
 class TestMessageTemplates:
-    """Tests for MessageTemplates class."""
+    """Tests for MessageTemplates class and its formatting methods."""
     
-    def test_session_started_with_desc_format(self):
-        """Test formatting session started with description."""
-        result = MessageTemplates.format_session_started_with_desc("Test project")
+    def test_format_methods(self):
+        """
+        Tests all message formatting methods:
+        - Session started with description (includes AI response note)
+        - Session started empty (includes timeout and buildproject hint)
+        - Session exists warning (shows message/word counts)
+        - Session cancelled (shows deleted message info)
+        - Progress update (shows current counts)
+        - Summary template (includes all project info)
+        """
+        # Session started with description
+        started_desc = MessageTemplates.format_session_started_with_desc("Test project")
+        assert "📝 **Prompt Session Started!**" in started_desc
+        assert "Test project" in started_desc
+        assert "AI Response" in started_desc
         
-        assert "📝 **Prompt Session Started!**" in result
-        assert "Test project" in result
-        assert "AI Response" in result
-    
-    def test_session_started_empty_format(self):
-        """Test formatting session started without description."""
-        result = MessageTemplates.format_session_started_empty(30)
+        # Session started empty
+        started_empty = MessageTemplates.format_session_started_empty(30)
+        assert "📝 **Prompt Session Started!**" in started_empty
+        assert "30 minutes" in started_empty
+        assert "/buildproject" in started_empty
         
-        assert "📝 **Prompt Session Started!**" in result
-        assert "30 minutes" in result
-        assert "/buildproject" in result
-    
-    def test_session_exists_warning_format(self):
-        """Test formatting existing session warning."""
-        result = MessageTemplates.format_session_exists_warning(5, 100)
+        # Session exists warning
+        exists_warn = MessageTemplates.format_session_exists_warning(5, 100)
+        assert "5" in exists_warn
+        assert "100" in exists_warn
+        assert "/buildproject" in exists_warn
         
-        assert "5" in result
-        assert "100" in result
-        assert "/buildproject" in result
-    
-    def test_session_cancelled_format(self):
-        """Test formatting session cancelled message."""
-        result = MessageTemplates.format_session_cancelled(3, 50)
+        # Session cancelled
+        cancelled = MessageTemplates.format_session_cancelled(3, 50)
+        assert "🗑️ **Session Cancelled**" in cancelled
+        assert "3 messages" in cancelled
+        assert "50" in cancelled
         
-        assert "🗑️ **Session Cancelled**" in result
-        assert "3 messages" in result
-        assert "50" in result
-    
-    def test_progress_update_format(self):
-        """Test formatting progress update."""
-        result = MessageTemplates.format_progress_update(10, 500)
+        # Progress update
+        progress = MessageTemplates.format_progress_update(10, 500)
+        assert "10 messages" in progress
+        assert "500" in progress
         
-        assert "10 messages" in result
-        assert "500" in result
-    
-    def test_format_summary(self):
-        """Test formatting project summary."""
-        result = MessageTemplates.format_summary(
+        # Summary template with all fields
+        summary = MessageTemplates.format_summary(
             status="✅ COMPLETED",
             truncated_prompt="Test prompt...",
             model="gpt-4",
@@ -60,21 +62,29 @@ class TestMessageTemplates:
             user_mention="@user",
             github_status="\n**🐙 GitHub:** Success"
         )
-        
-        assert "✅ COMPLETED" in result
-        assert "Test prompt..." in result
-        assert "gpt-4" in result
-        assert "10" in result
-        assert "3" in result
-        assert "@user" in result
-        assert "GitHub" in result
+        assert "✅ COMPLETED" in summary
+        assert "Test prompt..." in summary
+        assert "gpt-4" in summary
+        assert "10" in summary
+        assert "3" in summary
+        assert "@user" in summary
+        assert "GitHub" in summary
 
 
 class TestProjectSummary:
-    """Tests for ProjectSummary dataclass."""
+    """Tests for ProjectSummary dataclass and format_project_success method."""
     
-    def test_project_summary_creation(self):
-        """Test creating a ProjectSummary."""
+    def test_dataclass_and_formatting(self):
+        """
+        Tests ProjectSummary creation and formatting:
+        - Basic creation with required fields
+        - Default github_status is empty
+        - Creation with GitHub info
+        - format_project_success with GitHub URL
+        - format_project_success without GitHub URL
+        - format_project_success with github_status fallback
+        """
+        # Basic creation
         summary = ProjectSummary(
             status="completed",
             prompt="Test prompt",
@@ -83,7 +93,6 @@ class TestProjectSummary:
             dir_count=2,
             user_mention="@user"
         )
-        
         assert summary.status == "completed"
         assert summary.prompt == "Test prompt"
         assert summary.model == "gpt-4"
@@ -91,10 +100,9 @@ class TestProjectSummary:
         assert summary.dir_count == 2
         assert summary.user_mention == "@user"
         assert summary.github_status == ""  # Default
-    
-    def test_project_summary_with_github(self):
-        """Test ProjectSummary with GitHub info."""
-        summary = ProjectSummary(
+        
+        # With GitHub info
+        summary_gh = ProjectSummary(
             status="completed",
             prompt="Test prompt",
             model="gpt-4",
@@ -105,18 +113,12 @@ class TestProjectSummary:
             project_name="test-project",
             description="A test project"
         )
+        assert summary_gh.github_url == "https://github.com/user/repo"
+        assert summary_gh.project_name == "test-project"
+        assert summary_gh.description == "A test project"
         
-        assert summary.github_url == "https://github.com/user/repo"
-        assert summary.project_name == "test-project"
-        assert summary.description == "A test project"
-
-
-class TestFormatProjectSuccess:
-    """Tests for format_project_success method."""
-    
-    def test_format_with_github_url(self):
-        """Test formatting success message with GitHub URL."""
-        summary = ProjectSummary(
+        # format_project_success with GitHub URL
+        result_with_gh = MessageTemplates.format_project_success(ProjectSummary(
             status="completed",
             prompt="Test prompt",
             model="gpt-4",
@@ -126,21 +128,16 @@ class TestFormatProjectSuccess:
             project_name="my-project",
             description="My project description",
             github_url="https://github.com/user/my-project"
-        )
+        ))
+        assert "✅ COMPLETED SUCCESSFULLY" in result_with_gh
+        assert "my-project" in result_with_gh
+        assert "My project description" in result_with_gh
+        assert "gpt-4" in result_with_gh
+        assert "10" in result_with_gh
+        assert "github.com/user/my-project" in result_with_gh
         
-        result = MessageTemplates.format_project_success(summary)
-        
-        assert "✅ COMPLETED SUCCESSFULLY" in result
-        assert "my-project" in result
-        assert "My project description" in result
-        assert "gpt-4" in result
-        assert "10" in result
-        assert "3" in result
-        assert "github.com/user/my-project" in result
-    
-    def test_format_without_github_url(self):
-        """Test formatting success message without GitHub URL."""
-        summary = ProjectSummary(
+        # format_project_success without GitHub URL
+        result_no_gh = MessageTemplates.format_project_success(ProjectSummary(
             status="completed",
             prompt="Test prompt",
             model="default",
@@ -148,16 +145,12 @@ class TestFormatProjectSuccess:
             dir_count=1,
             user_mention="@user",
             project_name="local-project"
-        )
+        ))
+        assert "local-project" in result_no_gh
+        assert "No description generated" in result_no_gh
         
-        result = MessageTemplates.format_project_success(summary)
-        
-        assert "local-project" in result
-        assert "No description generated" in result
-    
-    def test_format_with_github_status_fallback(self):
-        """Test that github_status is used when github_url is None."""
-        summary = ProjectSummary(
+        # format_project_success with github_status fallback
+        result_fallback = MessageTemplates.format_project_success(ProjectSummary(
             status="completed",
             prompt="Test prompt",
             model="default",
@@ -165,18 +158,20 @@ class TestFormatProjectSuccess:
             dir_count=1,
             user_mention="@user",
             github_status="\n**🐙 GitHub:** ⚠️ Failed"
-        )
-        
-        result = MessageTemplates.format_project_success(summary)
-        
-        assert "⚠️ Failed" in result
+        ))
+        assert "⚠️ Failed" in result_fallback
 
 
 class TestMessageTemplateConstants:
-    """Tests for message template constants."""
+    """Tests for message template constants availability."""
     
-    def test_session_messages_defined(self):
-        """Test that session messages are defined."""
+    def test_all_templates_defined(self):
+        """
+        Verifies all required message templates are defined:
+        - Session messages (started, exists, cancelled, no session)
+        - Project messages (success, in progress, timed out, completed)
+        """
+        # Session messages
         assert MessageTemplates.SESSION_STARTED_WITH_DESC
         assert MessageTemplates.SESSION_STARTED_NO_AI
         assert MessageTemplates.SESSION_STARTED_EMPTY
@@ -186,9 +181,8 @@ class TestMessageTemplateConstants:
         assert MessageTemplates.NO_SESSION
         assert MessageTemplates.NO_ACTIVE_SESSION
         assert MessageTemplates.NO_MESSAGES_IN_SESSION
-    
-    def test_project_messages_defined(self):
-        """Test that project messages are defined."""
+        
+        # Project messages
         assert MessageTemplates.PROJECT_SUCCESS
         assert MessageTemplates.PROJECT_IN_PROGRESS
         assert MessageTemplates.PROJECT_TIMED_OUT

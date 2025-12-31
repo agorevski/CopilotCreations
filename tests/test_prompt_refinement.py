@@ -10,7 +10,6 @@ from src.utils.prompt_refinement import (
     PromptRefinementService,
     get_refinement_service,
     reset_refinement_service,
-    DEFAULT_REFINEMENT_SYSTEM_PROMPT,
 )
 
 
@@ -75,12 +74,15 @@ class TestPromptRefinementService:
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = "Here are some clarifying questions..."
+        mock_response.choices[0].message.refusal = None
+        mock_response.choices[0].finish_reason = "stop"
         mock_client.chat.completions.create.return_value = mock_response
         
         # Patch the private _client attribute instead of the property
         service._client = mock_client
         
-        response, refined = await service.get_refinement_response([], "Build a web app")
+        with patch('src.utils.prompt_refinement.get_required_prompt_template', return_value="You are an assistant"):
+            response, refined = await service.get_refinement_response([], "Build a web app")
         
         assert "clarifying questions" in response
         assert refined is None  # No "refined prompt ready" marker
@@ -99,16 +101,19 @@ class TestPromptRefinementService:
             "Here's your summary.\n\n"
             "📋 **Refined Prompt Ready** - Type `/buildproject` to create your project."
         )
+        mock_response.choices[0].message.refusal = None
+        mock_response.choices[0].finish_reason = "stop"
         mock_client.chat.completions.create.return_value = mock_response
         
         # Patch the private _client attribute instead of the property
         service._client = mock_client
         
-        with patch.object(service, '_extract_refined_prompt', return_value="Extracted prompt"):
-            response, refined = await service.get_refinement_response(
-                [{"role": "user", "content": "I want a React app"}],
-                "With authentication"
-            )
+        with patch('src.utils.prompt_refinement.get_required_prompt_template', return_value="You are an assistant"):
+            with patch.object(service, '_extract_refined_prompt', return_value="Extracted prompt"):
+                response, refined = await service.get_refinement_response(
+                    [{"role": "user", "content": "I want a React app"}],
+                    "With authentication"
+                )
         
         assert "Refined Prompt Ready" in response
         assert refined == "Extracted prompt"
@@ -142,12 +147,15 @@ class TestPromptRefinementService:
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = "1. What framework?\n2. What database?"
+        mock_response.choices[0].message.refusal = None
+        mock_response.choices[0].finish_reason = "stop"
         mock_client.chat.completions.create.return_value = mock_response
         
         # Patch the private _client attribute instead of the property
         service._client = mock_client
         
-        response = await service.generate_initial_questions("Build a web app")
+        with patch('src.utils.prompt_refinement.get_required_prompt_template', return_value="You are an assistant"):
+            response = await service.generate_initial_questions("Build a web app")
         
         assert "framework" in response.lower() or "database" in response.lower()
     
@@ -181,18 +189,11 @@ class TestPromptRefinementService:
         assert "Build a web app" in result
         assert "React" in result
     
-    def test_get_system_prompt_default(self, service):
-        """Test getting default system prompt."""
-        with patch('src.utils.prompt_refinement.get_prompt_template', return_value=""):
-            prompt = service._get_system_prompt()
-        
-        assert prompt == DEFAULT_REFINEMENT_SYSTEM_PROMPT
-    
-    def test_get_system_prompt_custom(self, service):
-        """Test getting custom system prompt from config."""
+    def test_get_system_prompt(self, service):
+        """Test getting system prompt from config."""
         custom_prompt = "You are a custom assistant."
         
-        with patch('src.utils.prompt_refinement.get_prompt_template', return_value=custom_prompt):
+        with patch('src.utils.prompt_refinement.get_required_prompt_template', return_value=custom_prompt):
             prompt = service._get_system_prompt()
         
         assert prompt == custom_prompt
@@ -251,7 +252,8 @@ class TestRefinementResponseEdgeCases:
         
         configured_service._client = mock_client
         
-        response, refined = await configured_service.get_refinement_response([], "test")
+        with patch('src.utils.prompt_refinement.get_required_prompt_template', return_value="You are an assistant"):
+            response, refined = await configured_service.get_refinement_response([], "test")
         
         assert "trouble processing" in response
         assert refined is None
@@ -272,7 +274,8 @@ class TestRefinementResponseEdgeCases:
         
         configured_service._client = mock_client
         
-        response, refined = await configured_service.get_refinement_response([], "test")
+        with patch('src.utils.prompt_refinement.get_required_prompt_template', return_value="You are an assistant"):
+            response, refined = await configured_service.get_refinement_response([], "test")
         
         assert "trouble processing" in response
         assert refined is None
@@ -290,7 +293,8 @@ class TestRefinementResponseEdgeCases:
         
         configured_service._client = mock_client
         
-        response, refined = await configured_service.get_refinement_response([], "test")
+        with patch('src.utils.prompt_refinement.get_required_prompt_template', return_value="You are an assistant"):
+            response, refined = await configured_service.get_refinement_response([], "test")
         
         assert response == "I cannot help with that."
     
@@ -304,8 +308,9 @@ class TestRefinementResponseEdgeCases:
         
         configured_service._client = mock_client
         
-        # This will raise an IndexError which gets caught
-        response, refined = await configured_service.get_refinement_response([], "test")
+        with patch('src.utils.prompt_refinement.get_required_prompt_template', return_value="You are an assistant"):
+            # This will raise an IndexError which gets caught
+            response, refined = await configured_service.get_refinement_response([], "test")
         
         assert "error" in response.lower()
 
@@ -343,10 +348,11 @@ class TestExtractRefinedPrompt:
         
         configured_service._client = mock_client
         
-        result = await configured_service._extract_refined_prompt([
-            {"role": "user", "content": "Build a web app"},
-            {"role": "assistant", "content": "What framework?"}
-        ])
+        with patch('src.utils.prompt_refinement.get_required_prompt_template', return_value="Extract the prompt"):
+            result = await configured_service._extract_refined_prompt([
+                {"role": "user", "content": "Build a web app"},
+                {"role": "assistant", "content": "What framework?"}
+            ])
         
         assert result == "# Project Spec\n\nBuild a React app"
     
@@ -361,9 +367,10 @@ class TestExtractRefinedPrompt:
         
         configured_service._client = mock_client
         
-        result = await configured_service._extract_refined_prompt([
-            {"role": "user", "content": "Build a web app"}
-        ])
+        with patch('src.utils.prompt_refinement.get_required_prompt_template', return_value="Extract the prompt"):
+            result = await configured_service._extract_refined_prompt([
+                {"role": "user", "content": "Build a web app"}
+            ])
         
         assert result is None
     
@@ -375,9 +382,10 @@ class TestExtractRefinedPrompt:
         
         configured_service._client = mock_client
         
-        result = await configured_service._extract_refined_prompt([
-            {"role": "user", "content": "Build a web app"}
-        ])
+        with patch('src.utils.prompt_refinement.get_required_prompt_template', return_value="Extract the prompt"):
+            result = await configured_service._extract_refined_prompt([
+                {"role": "user", "content": "Build a web app"}
+            ])
         
         assert result is None
 
@@ -440,3 +448,204 @@ class TestClientLazyLoading:
             
             assert client == mock_client
             mock_azure.assert_called_once()
+
+
+class TestStreamRefinementResponse:
+    """Tests for stream_refinement_response method."""
+    
+    @pytest.fixture
+    def configured_service(self):
+        """Create a configured refinement service."""
+        service = PromptRefinementService()
+        service.endpoint = "https://test.openai.azure.com"
+        service.api_key = "test-key"
+        service.deployment_name = "test-deployment"
+        return service
+    
+    @pytest.mark.asyncio
+    async def test_stream_not_configured(self):
+        """Test streaming response when service is not configured."""
+        service = PromptRefinementService()
+        service.endpoint = None
+        
+        results = []
+        async for chunk in service.stream_refinement_response([], "test message"):
+            results.append(chunk)
+        
+        assert len(results) == 1
+        response, is_complete, refined = results[0]
+        assert "not configured" in response.lower()
+        assert is_complete is True
+        assert refined is None
+    
+    @pytest.mark.asyncio
+    async def test_stream_success(self, configured_service):
+        """Test successful streaming response."""
+        mock_client = MagicMock()
+        
+        # Create mock stream chunks
+        mock_chunks = [
+            MagicMock(choices=[MagicMock(delta=MagicMock(content="Hello"))]),
+            MagicMock(choices=[MagicMock(delta=MagicMock(content=" world"))]),
+            MagicMock(choices=[MagicMock(delta=MagicMock(content="!"))]),
+        ]
+        mock_client.chat.completions.create.return_value = iter(mock_chunks)
+        
+        configured_service._client = mock_client
+        
+        with patch('src.utils.prompt_refinement.get_required_prompt_template', return_value="You are an assistant"):
+            results = []
+            async for chunk in configured_service.stream_refinement_response([], "Build a web app"):
+                results.append(chunk)
+        
+        # Should have streamed chunks plus final
+        assert len(results) >= 3
+        final_response, is_complete, refined = results[-1]
+        assert is_complete is True
+        assert "Hello world!" in final_response
+    
+    @pytest.mark.asyncio
+    async def test_stream_empty_response(self, configured_service):
+        """Test streaming with empty response."""
+        mock_client = MagicMock()
+        
+        # Empty stream
+        mock_client.chat.completions.create.return_value = iter([])
+        
+        configured_service._client = mock_client
+        
+        with patch('src.utils.prompt_refinement.get_required_prompt_template', return_value="You are an assistant"):
+            results = []
+            async for chunk in configured_service.stream_refinement_response([], "test"):
+                results.append(chunk)
+        
+        assert len(results) == 1
+        response, is_complete, refined = results[0]
+        assert "trouble processing" in response
+        assert is_complete is True
+    
+    @pytest.mark.asyncio
+    async def test_stream_with_refined_prompt_ready(self, configured_service):
+        """Test streaming when refined prompt is ready."""
+        mock_client = MagicMock()
+        
+        # Create mock stream chunks with "refined prompt ready" marker
+        mock_chunks = [
+            MagicMock(choices=[MagicMock(delta=MagicMock(content="Summary of your project.\n\n"))]),
+            MagicMock(choices=[MagicMock(delta=MagicMock(content="📋 **Refined Prompt Ready**"))]),
+        ]
+        mock_client.chat.completions.create.return_value = iter(mock_chunks)
+        
+        configured_service._client = mock_client
+        
+        # Mock the extraction streaming
+        async def mock_stream_extract(*args):
+            yield "Extracted prompt content"
+        
+        with patch('src.utils.prompt_refinement.get_required_prompt_template', return_value="You are an assistant"):
+            with patch.object(configured_service, '_stream_extract_refined_prompt', side_effect=mock_stream_extract):
+                results = []
+                async for chunk in configured_service.stream_refinement_response([], "test"):
+                    results.append(chunk)
+        
+        # Final result should have refined prompt
+        final_response, is_complete, refined = results[-1]
+        assert refined == "Extracted prompt content"
+    
+    @pytest.mark.asyncio
+    async def test_stream_handles_exception(self, configured_service):
+        """Test streaming handles exceptions."""
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = Exception("API Error")
+        
+        configured_service._client = mock_client
+        
+        with patch('src.utils.prompt_refinement.get_required_prompt_template', return_value="You are an assistant"):
+            results = []
+            async for chunk in configured_service.stream_refinement_response([], "test"):
+                results.append(chunk)
+        
+        assert len(results) == 1
+        response, is_complete, refined = results[0]
+        assert "error" in response.lower()
+        assert is_complete is True
+
+
+class TestStreamExtractRefinedPrompt:
+    """Tests for _stream_extract_refined_prompt method."""
+    
+    @pytest.fixture
+    def configured_service(self):
+        """Create a configured refinement service."""
+        service = PromptRefinementService()
+        service.endpoint = "https://test.openai.azure.com"
+        service.api_key = "test-key"
+        service.deployment_name = "test-deployment"
+        return service
+    
+    @pytest.mark.asyncio
+    async def test_stream_extract_not_configured(self):
+        """Test streaming extraction when not configured."""
+        service = PromptRefinementService()
+        service.endpoint = None
+        
+        results = []
+        async for chunk in service._stream_extract_refined_prompt([]):
+            results.append(chunk)
+        
+        assert len(results) == 0
+    
+    @pytest.mark.asyncio
+    async def test_stream_extract_success(self, configured_service):
+        """Test successful streaming extraction."""
+        mock_client = MagicMock()
+        
+        # Create mock stream chunks
+        mock_chunks = [
+            MagicMock(choices=[MagicMock(delta=MagicMock(content="# Project"))]),
+            MagicMock(choices=[MagicMock(delta=MagicMock(content=" Spec"))]),
+        ]
+        mock_client.chat.completions.create.return_value = iter(mock_chunks)
+        
+        configured_service._client = mock_client
+        
+        with patch('src.utils.prompt_refinement.get_required_prompt_template', return_value="Extract the prompt"):
+            results = []
+            async for chunk in configured_service._stream_extract_refined_prompt([
+                {"role": "user", "content": "Build a web app"}
+            ]):
+                results.append(chunk)
+        
+        assert len(results) == 2
+        assert results[-1] == "# Project Spec"
+    
+    @pytest.mark.asyncio
+    async def test_stream_extract_empty_response(self, configured_service):
+        """Test streaming extraction with empty response."""
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = iter([])
+        
+        configured_service._client = mock_client
+        
+        with patch('src.utils.prompt_refinement.get_required_prompt_template', return_value="Extract the prompt"):
+            results = []
+            async for chunk in configured_service._stream_extract_refined_prompt([]):
+                results.append(chunk)
+        
+        assert len(results) == 0
+    
+    @pytest.mark.asyncio
+    async def test_stream_extract_handles_exception(self, configured_service):
+        """Test streaming extraction handles exceptions."""
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = Exception("API Error")
+        
+        configured_service._client = mock_client
+        
+        with patch('src.utils.prompt_refinement.get_required_prompt_template', return_value="Extract the prompt"):
+            results = []
+            async for chunk in configured_service._stream_extract_refined_prompt([]):
+                results.append(chunk)
+        
+        # Should complete without yielding anything on error
+        assert len(results) == 0

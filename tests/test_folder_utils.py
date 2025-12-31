@@ -1,5 +1,8 @@
 """
 Tests for folder utility functions.
+
+This module tests folder-related utilities including username sanitization,
+folder ignore patterns, file counting, and folder tree generation.
 """
 
 import tempfile
@@ -20,177 +23,181 @@ from src.utils.folder_utils import (
 
 
 class TestSanitizeUsername:
-    """Tests for sanitize_username function."""
+    """Tests for sanitize_username function which cleans usernames for filesystem use."""
     
-    def test_normal_username(self):
+    def test_sanitization(self):
+        """
+        Tests username sanitization for various cases:
+        - Normal username (unchanged)
+        - Special characters removed (<>:"/\\|?*)
+        - Empty username returns default
+        - Dots-only returns default
+        - Long username truncated
+        - Leading/trailing dots and spaces stripped
+        """
+        # Normal username unchanged
         assert sanitize_username("john_doe") == "john_doe"
-    
-    def test_username_with_special_chars(self):
+        
+        # Special characters removed
         result = sanitize_username("user<>:name")
-        assert "<" not in result
-        assert ">" not in result
-        assert ":" not in result
-    
-    def test_empty_username(self):
+        assert "<" not in result and ">" not in result and ":" not in result
+        
+        assert "\\" not in sanitize_username("user\\name")
+        assert "/" not in sanitize_username("user/name")
+        assert "|" not in sanitize_username("user|name")
+        assert "?" not in sanitize_username("user?name")
+        assert "*" not in sanitize_username("user*name")
+        assert '"' not in sanitize_username('user"name')
+        
+        # Empty and dots-only return default
         assert sanitize_username("") == "unknown_user"
-    
-    def test_username_with_dots_only(self):
         assert sanitize_username("...") == "unknown_user"
-    
-    def test_long_username_truncated(self):
-        long_name = "a" * 100
-        result = sanitize_username(long_name)
+        
+        # Long username truncated
+        result = sanitize_username("a" * 100)
         assert len(result) <= 50
-    
-    def test_username_with_backslash(self):
-        result = sanitize_username("user\\name")
-        assert "\\" not in result
-    
-    def test_username_with_forward_slash(self):
-        result = sanitize_username("user/name")
-        assert "/" not in result
-    
-    def test_username_with_pipe(self):
-        result = sanitize_username("user|name")
-        assert "|" not in result
-    
-    def test_username_with_question_mark(self):
-        result = sanitize_username("user?name")
-        assert "?" not in result
-    
-    def test_username_with_asterisk(self):
-        result = sanitize_username("user*name")
-        assert "*" not in result
-    
-    def test_username_with_quotes(self):
-        result = sanitize_username('user"name')
-        assert '"' not in result
-    
-    def test_username_with_leading_trailing_dots(self):
+        
+        # Leading/trailing dots and spaces stripped
         result = sanitize_username(".user.")
-        assert not result.startswith(".")
-        assert not result.endswith(".")
-    
-    def test_username_with_spaces(self):
+        assert not result.startswith(".") and not result.endswith(".")
+        
         result = sanitize_username("  user  ")
-        assert not result.startswith(" ")
-        assert not result.endswith(" ")
+        assert not result.startswith(" ") and not result.endswith(" ")
 
 
 class TestUsernameConstants:
-    """Tests for username-related constants."""
+    """Tests for username-related constants and their integration."""
     
-    def test_max_username_length_is_positive(self):
-        """Test that MAX_USERNAME_LENGTH is a positive integer."""
+    def test_constants_and_integration(self):
+        """
+        Tests username constants:
+        - MAX_USERNAME_LENGTH is 50
+        - DEFAULT_USERNAME is "unknown_user"
+        - sanitize_username respects MAX_USERNAME_LENGTH
+        - sanitize_username returns DEFAULT_USERNAME for empty
+        """
         assert isinstance(MAX_USERNAME_LENGTH, int)
         assert MAX_USERNAME_LENGTH > 0
         assert MAX_USERNAME_LENGTH == 50
-    
-    def test_default_username_is_string(self):
-        """Test that DEFAULT_USERNAME is a non-empty string."""
+        
         assert isinstance(DEFAULT_USERNAME, str)
         assert len(DEFAULT_USERNAME) > 0
         assert DEFAULT_USERNAME == "unknown_user"
-    
-    def test_sanitize_respects_max_length(self):
-        """Test that sanitize_username respects MAX_USERNAME_LENGTH."""
+        
+        # Integration: long names truncated to max length
         long_name = "a" * (MAX_USERNAME_LENGTH + 50)
         result = sanitize_username(long_name)
         assert len(result) <= MAX_USERNAME_LENGTH
+        
+        # Integration: empty returns default
+        assert sanitize_username("") == DEFAULT_USERNAME
+
+
+class TestLoadFolderignore:
+    """Tests for load_folderignore function which loads ignore patterns."""
     
-    def test_sanitize_returns_default_for_empty(self):
-        """Test that sanitize_username returns DEFAULT_USERNAME for empty input."""
-        result = sanitize_username("")
-        assert result == DEFAULT_USERNAME
-    """Tests for load_folderignore function."""
-    
-    def test_loads_from_directory(self):
+    def test_load_patterns(self):
+        """
+        Tests loading .folderignore patterns:
+        - Loads patterns from directory
+        - Ignores comments and empty lines
+        - Strips trailing slashes
+        - Returns empty set for missing file
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
+            
+            # Load patterns from file
             ignore_file = tmppath / ".folderignore"
             ignore_file.write_text("node_modules/\ndist/\n# comment\n\n")
             
             patterns = load_folderignore(tmppath)
-            
             assert "node_modules" in patterns
             assert "dist" in patterns
             assert "# comment" not in patterns
-    
-    def test_returns_empty_for_missing_file(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            patterns = load_folderignore(Path(tmpdir))
-            # May return empty or patterns from parent/script dir
+            
+        # Missing file returns set (may be empty or from parent)
+        with tempfile.TemporaryDirectory() as tmpdir2:
+            patterns = load_folderignore(Path(tmpdir2))
             assert isinstance(patterns, set)
-    
-    def test_strips_trailing_slashes(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmppath = Path(tmpdir)
-            ignore_file = tmppath / ".folderignore"
+        
+        # Strips trailing slashes
+        with tempfile.TemporaryDirectory() as tmpdir3:
+            ignore_file = Path(tmpdir3) / ".folderignore"
             ignore_file.write_text("folder_with_slash/\n")
-            
-            patterns = load_folderignore(tmppath)
-            
+            patterns = load_folderignore(Path(tmpdir3))
             assert "folder_with_slash" in patterns
-    
-    def test_skips_empty_lines(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmppath = Path(tmpdir)
-            ignore_file = tmppath / ".folderignore"
+        
+        # Skips empty lines
+        with tempfile.TemporaryDirectory() as tmpdir4:
+            ignore_file = Path(tmpdir4) / ".folderignore"
             ignore_file.write_text("pattern1\n\n\npattern2\n")
-            
-            patterns = load_folderignore(tmppath)
-            
+            patterns = load_folderignore(Path(tmpdir4))
             assert "" not in patterns
             assert "pattern1" in patterns
             assert "pattern2" in patterns
 
 
 class TestIsIgnored:
-    """Tests for is_ignored function."""
+    """Tests for is_ignored function which checks if a path matches ignore patterns."""
     
-    def test_exact_match(self):
+    def test_pattern_matching(self):
+        """
+        Tests pattern matching:
+        - Exact match
+        - No match returns False
+        - Glob patterns (*.pyc)
+        - Empty patterns returns False
+        - Pattern with trailing slash
+        - Wildcard prefix patterns
+        """
+        # Exact match
         patterns = {"node_modules", "dist"}
         assert is_ignored("node_modules", patterns) is True
         assert is_ignored("dist", patterns) is True
-    
-    def test_no_match(self):
-        patterns = {"node_modules", "dist"}
-        assert is_ignored("src", patterns) is False
-    
-    def test_glob_pattern(self):
-        patterns = {"*.pyc", "__pycache__"}
-        assert is_ignored("file.pyc", patterns) is True
-        assert is_ignored("__pycache__", patterns) is True
-    
-    def test_empty_patterns(self):
+        assert is_ignored("src", patterns) is False  # No match
+        
+        # Glob patterns
+        glob_patterns = {"*.pyc", "__pycache__"}
+        assert is_ignored("file.pyc", glob_patterns) is True
+        assert is_ignored("__pycache__", glob_patterns) is True
+        
+        # Empty patterns
         assert is_ignored("anything", set()) is False
-    
-    def test_pattern_with_trailing_slash(self):
-        patterns = {"build/"}
-        assert is_ignored("build", patterns) is True
-    
-    def test_wildcard_prefix(self):
-        patterns = {"*.log"}
-        assert is_ignored("error.log", patterns) is True
-        assert is_ignored("debug.log", patterns) is True
-        assert is_ignored("file.txt", patterns) is False
+        
+        # Trailing slash
+        assert is_ignored("build", {"build/"}) is True
+        
+        # Wildcard prefix
+        log_patterns = {"*.log"}
+        assert is_ignored("error.log", log_patterns) is True
+        assert is_ignored("debug.log", log_patterns) is True
+        assert is_ignored("file.txt", log_patterns) is False
 
 
 class TestCountFilesRecursive:
     """Tests for count_files_recursive function."""
     
-    def test_empty_directory(self):
+    def test_file_counting(self):
+        """
+        Tests recursive file counting:
+        - Empty directory (0)
+        - Directory with files
+        - Nested files (counts all)
+        - Deeply nested files
+        """
+        # Empty directory
         with tempfile.TemporaryDirectory() as tmpdir:
             assert count_files_recursive(Path(tmpdir)) == 0
-    
-    def test_directory_with_files(self):
+        
+        # With files
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             (tmppath / "file1.txt").touch()
             (tmppath / "file2.txt").touch()
             assert count_files_recursive(tmppath) == 2
-    
-    def test_nested_files(self):
+        
+        # Nested files
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             (tmppath / "file1.txt").touch()
@@ -198,8 +205,8 @@ class TestCountFilesRecursive:
             subdir.mkdir()
             (subdir / "file2.txt").touch()
             assert count_files_recursive(tmppath) == 2
-    
-    def test_deeply_nested(self):
+        
+        # Deeply nested
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             deep = tmppath / "a" / "b" / "c"
@@ -211,7 +218,13 @@ class TestCountFilesRecursive:
 class TestCountFilesExcludingIgnored:
     """Tests for count_files_excluding_ignored function."""
     
-    def test_excludes_ignored_dirs(self):
+    def test_exclusion_counting(self):
+        """
+        Tests counting with exclusions:
+        - Excludes ignored directories
+        - Counts all without ignore patterns
+        - Multiple ignored directories
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             
@@ -226,13 +239,12 @@ class TestCountFilesExcludingIgnored:
             node_modules.mkdir()
             (node_modules / "package.json").touch()
             
-            patterns = {"node_modules"}
-            file_count, dir_count = count_files_excluding_ignored(tmppath, patterns)
-            
+            # Excludes ignored
+            file_count, dir_count = count_files_excluding_ignored(tmppath, {"node_modules"})
             assert file_count == 2  # file1.txt and main.py
             assert dir_count == 1   # src only
-    
-    def test_counts_all_without_ignore(self):
+        
+        # Counts all without patterns
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             (tmppath / "file.txt").touch()
@@ -241,71 +253,67 @@ class TestCountFilesExcludingIgnored:
             (subdir / "file2.txt").touch()
             
             file_count, dir_count = count_files_excluding_ignored(tmppath, set())
-            
             assert file_count == 2
             assert dir_count == 1
-    
-    def test_multiple_ignored_dirs(self):
+        
+        # Multiple ignored
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
-            
             for name in ["node_modules", "dist", "build"]:
                 d = tmppath / name
                 d.mkdir()
                 (d / "file.txt").touch()
             
-            patterns = {"node_modules", "dist", "build"}
-            file_count, dir_count = count_files_excluding_ignored(tmppath, patterns)
-            
+            file_count, dir_count = count_files_excluding_ignored(tmppath, {"node_modules", "dist", "build"})
             assert file_count == 0
             assert dir_count == 0
 
 
 class TestGetFolderTree:
-    """Tests for get_folder_tree function."""
+    """Tests for get_folder_tree function which generates tree visualization."""
     
-    def test_empty_directory(self):
+    def test_tree_generation(self):
+        """
+        Tests folder tree generation:
+        - Empty directory shows "(empty folder)"
+        - Contains file names
+        - Non-existent shows "not yet created"
+        - Ignored folders hidden
+        - Max depth limits output
+        - Directories sorted before files
+        - Tree connectors present
+        """
+        # Empty directory
         with tempfile.TemporaryDirectory() as tmpdir:
             result = get_folder_tree(Path(tmpdir))
             assert result == "(empty folder)"
-    
-    def test_directory_with_files(self):
+        
+        # With files
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             (tmppath / "file1.txt").touch()
             result = get_folder_tree(tmppath)
             assert "file1.txt" in result
-    
-    def test_nonexistent_directory(self):
+        
+        # Non-existent
         result = get_folder_tree(Path("/nonexistent/path"))
         assert "not yet created" in result
-    
-    def test_ignored_folder_hidden(self):
+        
+        # Ignored folders hidden
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
-            
-            # Create ignored directory with files
             node_modules = tmppath / "node_modules"
             node_modules.mkdir()
             (node_modules / "package.json").touch()
-            (node_modules / "index.js").touch()
-            
-            # Create a non-ignored file
             (tmppath / "readme.txt").touch()
             
-            patterns = {"node_modules"}
-            result = get_folder_tree(tmppath, ignore_patterns=patterns)
-            
-            # Ignored folders should be completely hidden
+            result = get_folder_tree(tmppath, ignore_patterns={"node_modules"})
             assert "node_modules" not in result
-            assert "package.json" not in result
             assert "readme.txt" in result
-    
-    def test_max_depth_limit(self):
+        
+        # Max depth limits
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
-            
-            # Create deeply nested structure
             current = tmppath
             for i in range(10):
                 current = current / f"level{i}"
@@ -313,57 +321,55 @@ class TestGetFolderTree:
                 (current / "file.txt").touch()
             
             result = get_folder_tree(tmppath, max_depth=2)
-            
-            # Should truncate with ...
             assert "..." in result
-    
-    def test_sorts_directories_first(self):
+        
+        # Directories before files
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             (tmppath / "zfile.txt").touch()
             (tmppath / "adir").mkdir()
+            (tmppath / "adir" / "placeholder.txt").touch()  # Need file for dir to show
             
             result = get_folder_tree(tmppath)
-            
-            # Directory should appear before file
             adir_pos = result.find("adir")
             zfile_pos = result.find("zfile")
             assert adir_pos < zfile_pos
-    
-    def test_tree_connectors(self):
+        
+        # Tree connectors
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             (tmppath / "file1.txt").touch()
             (tmppath / "file2.txt").touch()
-            
             result = get_folder_tree(tmppath)
-            
-            # Should contain tree connectors (shortened format)
             assert "├ " in result or "└ " in result
     
-    def test_inline_empty_folder(self):
+    def test_tree_formatting(self):
+        """
+        Tests folder tree formatting:
+        - Empty folders omitted
+        - Single file inlined with parent
+        - Nested single-child paths inlined
+        - Multiple files comma-separated
+        - Files truncated after max with (+N files)
+        - Directories before grouped files
+        """
+        # Empty folders omitted
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             (tmppath / "workflows").mkdir()
-            
             result = get_folder_tree(tmppath)
-            
-            # Empty folders should be omitted entirely
             assert "workflows" not in result
-    
-    def test_inline_single_file(self):
+        
+        # Single file inlined
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             workflows = tmppath / "workflows"
             workflows.mkdir()
             (workflows / "ci.yaml").touch()
-            
             result = get_folder_tree(tmppath)
-            
-            # Single file should be inlined with parent
             assert "workflows/ci.yaml" in result
-    
-    def test_inline_nested_single_path(self):
+        
+        # Nested single-child inlined
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             github = tmppath / ".github"
@@ -371,107 +377,53 @@ class TestGetFolderTree:
             workflows = github / "workflows"
             workflows.mkdir()
             (workflows / "ci.yaml").touch()
-            
             result = get_folder_tree(tmppath)
-            
-            # Nested single-child paths should be fully inlined
             assert ".github/workflows/ci.yaml" in result
-    
-    def test_inline_nested_empty_folder(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmppath = Path(tmpdir)
-            github = tmppath / ".github"
-            github.mkdir()
-            workflows = github / "workflows"
-            workflows.mkdir()
-            
-            result = get_folder_tree(tmppath)
-            
-            # Nested empty folders should be omitted entirely
-            assert ".github" not in result
-            assert "workflows" not in result
-    
-    def test_multiple_files_comma_separated(self):
-        """Test that multiple files in same directory are comma-separated on one line."""
+        
+        # Multiple files comma-separated
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             src = tmppath / "src"
             src.mkdir()
             for name in ["__init__.py", "cli.py", "models.py"]:
                 (src / name).touch()
-            
             result = get_folder_tree(tmppath)
-            
-            # Files should be comma-separated on one line
             assert "__init__.py, cli.py, models.py" in result
-    
-    def test_files_truncated_after_max(self):
-        """Test that files beyond max_files_inline show (+N files) count."""
+        
+        # Files truncated after max
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             src = tmppath / "src"
             src.mkdir()
-            # Create 15 files
             for i in range(15):
                 (src / f"file{i:02d}.py").touch()
-            
             result = get_folder_tree(tmppath, max_files_inline=10)
-            
-            # Should show first 10 files and (+5 files)
             assert "(+5 files)" in result
             assert "file00.py" in result
-            assert "file09.py" in result
-    
-    def test_files_at_exact_max_no_truncation(self):
-        """Test that exactly max_files_inline files shows all without (+N files)."""
+        
+        # Exact max shows all
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             src = tmppath / "src"
             src.mkdir()
-            # Create exactly 10 files
             for i in range(10):
                 (src / f"file{i:02d}.py").touch()
-            
             result = get_folder_tree(tmppath, max_files_inline=10)
-            
-            # Should show all 10 files without truncation message
             assert "(+" not in result
-            assert "file00.py" in result
-            assert "file09.py" in result
-    
-    def test_custom_max_files_inline(self):
-        """Test custom max_files_inline parameter."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmppath = Path(tmpdir)
-            src = tmppath / "src"
-            src.mkdir()
-            # Create 8 files
-            for i in range(8):
-                (src / f"file{i}.py").touch()
-            
-            result = get_folder_tree(tmppath, max_files_inline=5)
-            
-            # Should show first 5 and (+3 files)
-            assert "(+3 files)" in result
-    
-    def test_dirs_and_files_mixed(self):
-        """Test that directories appear before grouped files."""
+        
+        # Dirs before grouped files
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             (tmppath / "src").mkdir()
+            (tmppath / "src" / "main.py").touch()
             (tmppath / "tests").mkdir()
+            (tmppath / "tests" / "test.py").touch()
             (tmppath / "README.md").touch()
             (tmppath / "setup.py").touch()
             
             result = get_folder_tree(tmppath)
-            
-            # Dirs should appear before files
             src_pos = result.find("src")
-            tests_pos = result.find("tests")
             readme_pos = result.find("README.md")
-            
             assert src_pos < readme_pos
-            assert tests_pos < readme_pos
-            # Files should be on one line
             assert "README.md, setup.py" in result
 

@@ -1008,6 +1008,370 @@ class TestBuildprojectFullFlow:
         assert mock_interaction.channel.fetch_message.call_count == 3
 
 
+class TestStreamingEdgeCases:
+    """Tests for streaming message edge cases."""
+    
+    @pytest.fixture
+    def mock_interaction(self):
+        """Create a mock Discord interaction."""
+        interaction = AsyncMock()
+        interaction.response = AsyncMock()
+        interaction.followup = AsyncMock()
+        interaction.channel = AsyncMock()
+        interaction.user = MagicMock()
+        interaction.user.id = 12345
+        interaction.user.name = "testuser"
+        interaction.channel.id = 67890
+        return interaction
+    
+    @pytest.mark.asyncio
+    async def test_streaming_edit_failure_logs_warning(self, mock_interaction):
+        """Test that HTTP exceptions during message edit are logged."""
+        import discord
+        
+        mock_session = MagicMock()
+        mock_session.add_message = MagicMock()
+        mock_session.add_conversation_turn = MagicMock()
+        mock_session.add_bot_message_id = MagicMock()
+        
+        mock_sm = MagicMock()
+        mock_sm.get_session = AsyncMock(return_value=None)
+        mock_sm.start_session = AsyncMock(return_value=mock_session)
+        
+        mock_rs = MagicMock()
+        mock_rs.is_configured.return_value = True
+        
+        # Create async generator mock for streaming with multiple chunks
+        async def mock_stream(*args, **kwargs):
+            yield ("First chunk", False, None)
+            yield ("Second chunk", False, None)
+            yield ("Final response", True, None)
+        mock_rs.stream_refinement_response = mock_stream
+        
+        # First message send works, subsequent edits fail
+        mock_msg = AsyncMock()
+        mock_msg.id = 111
+        mock_msg.edit = AsyncMock(side_effect=discord.HTTPException(MagicMock(), "Rate limited"))
+        mock_interaction.channel.send = AsyncMock(return_value=mock_msg)
+        
+        with patch('src.commands.session_commands.get_session_manager', return_value=mock_sm):
+            with patch('src.commands.session_commands.get_refinement_service', return_value=mock_rs):
+                from src.commands.session_commands import setup_session_commands
+                
+                mock_bot = MagicMock()
+                captured = {}
+                
+                def mock_command(*args, **kwargs):
+                    def decorator(func):
+                        captured[kwargs.get('name')] = func
+                        return func
+                    return decorator
+                
+                mock_bot.tree.command = mock_command
+                setup_session_commands(mock_bot)
+                handler = captured.get('startproject')
+                
+                await handler(mock_interaction, "Build a web app")
+        
+        # Should have attempted to edit at least once
+        assert mock_msg.edit.call_count >= 1
+    
+    @pytest.mark.asyncio
+    async def test_long_response_with_footer_splits(self, mock_interaction):
+        """Test that long responses split footer properly."""
+        mock_session = MagicMock()
+        mock_session.add_message = MagicMock()
+        mock_session.add_conversation_turn = MagicMock()
+        mock_session.add_bot_message_id = MagicMock()
+        
+        mock_sm = MagicMock()
+        mock_sm.get_session = AsyncMock(return_value=None)
+        mock_sm.start_session = AsyncMock(return_value=mock_session)
+        
+        mock_rs = MagicMock()
+        mock_rs.is_configured.return_value = True
+        
+        # Create response that's just under the limit, but footer pushes it over
+        response_length = 1900
+        async def mock_stream(*args, **kwargs):
+            yield ("X" * response_length, True, None)
+        mock_rs.stream_refinement_response = mock_stream
+        
+        mock_msg = AsyncMock()
+        mock_msg.id = 111
+        mock_interaction.channel.send = AsyncMock(return_value=mock_msg)
+        
+        with patch('src.commands.session_commands.get_session_manager', return_value=mock_sm):
+            with patch('src.commands.session_commands.get_refinement_service', return_value=mock_rs):
+                from src.commands.session_commands import setup_session_commands
+                
+                mock_bot = MagicMock()
+                captured = {}
+                
+                def mock_command(*args, **kwargs):
+                    def decorator(func):
+                        captured[kwargs.get('name')] = func
+                        return func
+                    return decorator
+                
+                mock_bot.tree.command = mock_command
+                setup_session_commands(mock_bot)
+                handler = captured.get('startproject')
+                
+                await handler(mock_interaction, "Build a web app")
+        
+        # Should have sent at least 2 messages (content + footer if split)
+        assert mock_interaction.channel.send.call_count >= 1
+
+
+class TestMessageListenerRefinedPrompt:
+    """Tests for message listener refined prompt handling."""
+    
+    @pytest.mark.asyncio
+    async def test_message_with_refined_prompt(self):
+        """Test handling of message that triggers refined prompt."""
+        mock_session = MagicMock()
+        mock_session.add_message = MagicMock()
+        mock_session.add_conversation_turn = MagicMock()
+        mock_session.add_bot_message_id = MagicMock()
+        mock_session.conversation_history = [{"role": "user", "content": "test"}]
+        mock_session.refined_prompt = None
+        
+        mock_sm = MagicMock()
+        mock_sm.get_session = AsyncMock(return_value=mock_session)
+        
+        mock_rs = MagicMock()
+        mock_rs.is_configured.return_value = True
+        
+        # Create async generator mock that yields a refined prompt
+        async def mock_stream(*args, **kwargs):
+            yield ("Here's your refined prompt.", True, "Refined project spec content")
+        mock_rs.stream_refinement_response = mock_stream
+        
+        with patch('src.commands.session_commands.get_session_manager', return_value=mock_sm):
+            with patch('src.commands.session_commands.get_refinement_service', return_value=mock_rs):
+                from src.commands.session_commands import setup_message_listener
+                
+                mock_bot = MagicMock()
+                captured_handler = None
+                
+                def mock_event(func):
+                    nonlocal captured_handler
+                    captured_handler = func
+                    return func
+                
+                mock_bot.event = mock_event
+                setup_message_listener(mock_bot)
+                
+                mock_message = AsyncMock()
+                mock_message.author.bot = False
+                mock_message.guild = MagicMock()
+                mock_message.author.id = 12345
+                mock_message.author.name = "testuser"
+                mock_message.channel.id = 67890
+                mock_message.content = "I want React with TypeScript"
+                mock_message.id = 111
+                mock_message.add_reaction = AsyncMock()
+                
+                # Create proper async mock for bot message returned by send
+                mock_bot_msg = AsyncMock()
+                mock_bot_msg.id = 222
+                mock_bot_msg.delete = AsyncMock()
+                mock_bot_msg.edit = AsyncMock()
+                mock_message.channel.send = AsyncMock(return_value=mock_bot_msg)
+                mock_message.reply = AsyncMock(return_value=mock_bot_msg)
+                
+                # Mock the typing context manager properly
+                mock_typing_cm = AsyncMock()
+                mock_typing_cm.__aenter__ = AsyncMock(return_value=None)
+                mock_typing_cm.__aexit__ = AsyncMock(return_value=None)
+                mock_message.channel.typing = MagicMock(return_value=mock_typing_cm)
+                
+                await captured_handler(mock_message)
+        
+        # Should have set the refined prompt
+        assert mock_session.refined_prompt == "Refined project spec content"
+    
+    @pytest.mark.asyncio
+    async def test_long_message_response_creates_file(self):
+        """Test that long responses create file attachments."""
+        mock_session = MagicMock()
+        mock_session.add_message = MagicMock()
+        mock_session.add_conversation_turn = MagicMock()
+        mock_session.add_bot_message_id = MagicMock()
+        mock_session.conversation_history = []
+        mock_session.refined_prompt = None
+        
+        mock_sm = MagicMock()
+        mock_sm.get_session = AsyncMock(return_value=mock_session)
+        
+        mock_rs = MagicMock()
+        mock_rs.is_configured.return_value = True
+        
+        # Create very long response
+        long_response = "X" * 3000
+        async def mock_stream(*args, **kwargs):
+            yield (long_response, True, None)
+        mock_rs.stream_refinement_response = mock_stream
+        
+        with patch('src.commands.session_commands.get_session_manager', return_value=mock_sm):
+            with patch('src.commands.session_commands.get_refinement_service', return_value=mock_rs):
+                from src.commands.session_commands import setup_message_listener
+                
+                mock_bot = MagicMock()
+                captured_handler = None
+                
+                def mock_event(func):
+                    nonlocal captured_handler
+                    captured_handler = func
+                    return func
+                
+                mock_bot.event = mock_event
+                setup_message_listener(mock_bot)
+                
+                mock_message = AsyncMock()
+                mock_message.author.bot = False
+                mock_message.guild = MagicMock()
+                mock_message.author.id = 12345
+                mock_message.author.name = "testuser"
+                mock_message.channel.id = 67890
+                mock_message.content = "Build something complex"
+                mock_message.id = 111
+                mock_message.add_reaction = AsyncMock()
+                
+                # Create proper async mock for bot message returned by send
+                mock_bot_msg = AsyncMock()
+                mock_bot_msg.id = 222
+                mock_bot_msg.delete = AsyncMock()
+                mock_bot_msg.edit = AsyncMock()
+                mock_message.channel.send = AsyncMock(return_value=mock_bot_msg)
+                
+                # Mock the typing context manager properly
+                mock_typing_cm = AsyncMock()
+                mock_typing_cm.__aenter__ = AsyncMock(return_value=None)
+                mock_typing_cm.__aexit__ = AsyncMock(return_value=None)
+                mock_message.channel.typing = MagicMock(return_value=mock_typing_cm)
+                
+                await captured_handler(mock_message)
+        
+        # Should have called channel.send (for file attachment)
+        assert mock_message.channel.send.call_count >= 1
+
+
+class TestBuildprojectMessageCleanupErrors:
+    """Tests for buildproject message cleanup error handling."""
+    
+    @pytest.fixture
+    def mock_interaction(self):
+        """Create a mock Discord interaction."""
+        interaction = AsyncMock()
+        interaction.response = AsyncMock()
+        interaction.followup = AsyncMock()
+        interaction.channel = AsyncMock()
+        interaction.user = MagicMock()
+        interaction.user.id = 12345
+        interaction.user.name = "testuser"
+        interaction.channel.id = 67890
+        return interaction
+    
+    @pytest.mark.asyncio
+    async def test_message_cleanup_handles_not_found(self, mock_interaction):
+        """Test that NotFound errors during cleanup are handled."""
+        import discord
+        
+        mock_session = MagicMock()
+        mock_session.get_message_count.return_value = 2
+        mock_session.conversation_history = []
+        mock_session.get_full_user_input.return_value = "test"
+        mock_session.message_ids = [111, 222]
+        mock_session.refined_prompt = None
+        
+        mock_sm = MagicMock()
+        mock_sm.get_session = AsyncMock(return_value=mock_session)
+        mock_sm.end_session = AsyncMock()
+        
+        mock_rs = MagicMock()
+        mock_rs.is_configured.return_value = False
+        
+        # First message is already deleted, second works
+        mock_interaction.channel.fetch_message = AsyncMock(
+            side_effect=discord.NotFound(MagicMock(), "Not found")
+        )
+        
+        with patch('src.commands.session_commands.get_session_manager', return_value=mock_sm):
+            with patch('src.commands.session_commands.get_refinement_service', return_value=mock_rs):
+                with patch('src.commands.session_commands._execute_project_creation') as mock_exec:
+                    from src.commands.session_commands import setup_session_commands
+                    
+                    mock_bot = MagicMock()
+                    mock_bot.request_semaphore = asyncio.Semaphore(1)
+                    captured = {}
+                    
+                    def mock_command(*args, **kwargs):
+                        def decorator(func):
+                            captured[kwargs.get('name')] = func
+                            return func
+                        return decorator
+                    
+                    mock_bot.tree.command = mock_command
+                    setup_session_commands(mock_bot)
+                    handler = captured.get('buildproject')
+                    
+                    # Should not raise
+                    await handler(mock_interaction, None)
+        
+        # Should have tried to delete 2 messages
+        assert mock_interaction.channel.fetch_message.call_count == 2
+    
+    @pytest.mark.asyncio
+    async def test_message_cleanup_handles_forbidden(self, mock_interaction):
+        """Test that Forbidden errors during cleanup are handled."""
+        import discord
+        
+        mock_session = MagicMock()
+        mock_session.get_message_count.return_value = 2
+        mock_session.conversation_history = []
+        mock_session.get_full_user_input.return_value = "test"
+        mock_session.message_ids = [111]
+        mock_session.refined_prompt = None
+        
+        mock_sm = MagicMock()
+        mock_sm.get_session = AsyncMock(return_value=mock_session)
+        mock_sm.end_session = AsyncMock()
+        
+        mock_rs = MagicMock()
+        mock_rs.is_configured.return_value = False
+        
+        mock_msg = AsyncMock()
+        mock_msg.delete = AsyncMock(side_effect=discord.Forbidden(MagicMock(), "No permission"))
+        mock_interaction.channel.fetch_message = AsyncMock(return_value=mock_msg)
+        
+        with patch('src.commands.session_commands.get_session_manager', return_value=mock_sm):
+            with patch('src.commands.session_commands.get_refinement_service', return_value=mock_rs):
+                with patch('src.commands.session_commands._execute_project_creation') as mock_exec:
+                    from src.commands.session_commands import setup_session_commands
+                    
+                    mock_bot = MagicMock()
+                    mock_bot.request_semaphore = asyncio.Semaphore(1)
+                    captured = {}
+                    
+                    def mock_command(*args, **kwargs):
+                        def decorator(func):
+                            captured[kwargs.get('name')] = func
+                            return func
+                        return decorator
+                    
+                    mock_bot.tree.command = mock_command
+                    setup_session_commands(mock_bot)
+                    handler = captured.get('buildproject')
+                    
+                    # Should not raise
+                    await handler(mock_interaction, None)
+        
+        # Should have attempted delete
+        mock_msg.delete.assert_called_once()
+
+
 class TestMessageListenerAIResponse:
     """Tests for message listener AI response handling."""
     

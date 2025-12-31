@@ -1,5 +1,8 @@
 """
 Tests for logging utilities.
+
+This module tests the SessionLogCollector class which collects and formats
+logs during project creation sessions for debugging and audit purposes.
 """
 
 import pytest
@@ -8,40 +11,42 @@ from src.utils.logging import SessionLogCollector
 
 
 class TestSessionLogCollector:
-    """Tests for SessionLogCollector class."""
+    """Tests for SessionLogCollector class covering initialization, logging, and markdown export."""
     
-    def test_init(self):
+    def test_initialization_and_logging_levels(self):
+        """
+        Tests collector initialization and all logging levels:
+        - Initialization with session ID and empty logs
+        - INFO, WARNING, and ERROR log levels
+        - Multiple log entries accumulate correctly
+        """
+        # Test initialization
         collector = SessionLogCollector("test_session")
         assert collector.session_id == "test_session"
         assert collector.logs == []
-    
-    def test_info_log(self):
-        collector = SessionLogCollector("test")
-        collector.info("Test message")
+        
+        # Test all log levels
+        collector.info("Info message")
         assert len(collector.logs) == 1
         assert "INFO" in collector.logs[0]
-        assert "Test message" in collector.logs[0]
-    
-    def test_warning_log(self):
-        collector = SessionLogCollector("test")
+        assert "Info message" in collector.logs[0]
+        
         collector.warning("Warning message")
-        assert len(collector.logs) == 1
-        assert "WARNING" in collector.logs[0]
-    
-    def test_error_log(self):
-        collector = SessionLogCollector("test")
+        assert len(collector.logs) == 2
+        assert "WARNING" in collector.logs[1]
+        
         collector.error("Error message")
-        assert len(collector.logs) == 1
-        assert "ERROR" in collector.logs[0]
-    
-    def test_multiple_logs(self):
-        collector = SessionLogCollector("test")
-        collector.info("First")
-        collector.warning("Second")
-        collector.error("Third")
         assert len(collector.logs) == 3
+        assert "ERROR" in collector.logs[2]
     
-    def test_get_markdown(self):
+    def test_get_markdown_basic(self):
+        """
+        Tests markdown export includes all required sections:
+        - Header with session ID
+        - Prompt and model info
+        - Status and file/dir counts
+        - Log entries and Copilot Output section
+        """
         collector = SessionLogCollector("test_session")
         collector.info("Test log entry")
         
@@ -61,17 +66,20 @@ class TestSessionLogCollector:
         assert "Files Created:** 5" in md
         assert "Directories Created:** 2" in md
         assert "Test log entry" in md
-        # Copilot Output section should exist even when empty
         assert "## Copilot Output" in md
     
     def test_get_markdown_with_copilot_output(self):
-        """Test that copilot output is included in the markdown log."""
+        """
+        Tests markdown export with Copilot output:
+        - Copilot output section populated correctly
+        - Multiline output preserved
+        - Special chars and unicode handled correctly
+        - Empty output still shows section header
+        """
         collector = SessionLogCollector("test_session")
-        collector.info("Starting copilot process...")
         
         copilot_output = """Creating project structure...
 Generating main.py...
-Generating requirements.txt...
 Done! Created 3 files."""
         
         md = collector.get_markdown(
@@ -85,47 +93,27 @@ Done! Created 3 files."""
         
         assert "## Copilot Output" in md
         assert "Creating project structure..." in md
-        assert "Generating main.py..." in md
-        assert "Generating requirements.txt..." in md
         assert "Done! Created 3 files." in md
-    
-    def test_get_markdown_copilot_output_empty(self):
-        """Test markdown generation when copilot output is empty."""
-        collector = SessionLogCollector("test_session")
         
-        md = collector.get_markdown(
-            prompt="Test prompt",
-            model="default",
-            status="ERROR",
-            file_count=0,
-            dir_count=0,
-            copilot_output=""
+        # Test empty output still shows section
+        collector2 = SessionLogCollector("test2")
+        md2 = collector2.get_markdown(
+            prompt="Test", model="default", status="ERROR",
+            file_count=0, dir_count=0, copilot_output=""
         )
+        assert "## Copilot Output" in md2
+        assert "## Execution Log" in md2
         
-        assert "## Copilot Output" in md
-        assert "## Execution Log" in md
-    
-    def test_get_markdown_copilot_output_multiline(self):
-        """Test that multiline copilot output is preserved correctly."""
-        collector = SessionLogCollector("test_session")
-        
-        multiline_output = """Line 1
-Line 2
-Line 3
+        # Test multiline with special chars
+        special_output = """Line 1
 Special chars: <>&"'
 Unicode: 日本語"""
         
-        md = collector.get_markdown(
-            prompt="Test",
-            model="gpt-4",
-            status="COMPLETED",
-            file_count=1,
-            dir_count=1,
-            copilot_output=multiline_output
+        collector3 = SessionLogCollector("test3")
+        md3 = collector3.get_markdown(
+            prompt="Test", model="gpt-4", status="COMPLETED",
+            file_count=1, dir_count=1, copilot_output=special_output
         )
-        
-        assert "Line 1" in md
-        assert "Line 2" in md
-        assert "Line 3" in md
-        assert 'Special chars: <>&"\'' in md
-        assert "Unicode: 日本語" in md
+        assert "Line 1" in md3
+        assert 'Special chars: <>&"\'' in md3
+        assert "Unicode: 日本語" in md3

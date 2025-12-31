@@ -1,5 +1,8 @@
 """
 Tests for async_buffer module.
+
+This module tests the AsyncOutputBuffer class which provides thread-safe
+buffering for async output streaming operations.
 """
 
 import asyncio
@@ -9,67 +12,52 @@ from src.utils.async_buffer import AsyncOutputBuffer
 
 
 class TestAsyncOutputBuffer:
-    """Tests for AsyncOutputBuffer class."""
+    """Tests for AsyncOutputBuffer class covering core operations and thread safety."""
     
     @pytest.mark.asyncio
-    async def test_append_and_get_content(self):
-        """Test basic append and get content operations."""
+    async def test_async_operations(self):
+        """
+        Tests async append/get operations including:
+        - Basic append and content retrieval
+        - Getting buffer as list with correct ordering
+        - List returns a copy (not the original) to prevent mutation
+        - Empty buffer returns empty string/list
+        """
         buffer = AsyncOutputBuffer()
         
+        # Test empty buffer first
+        assert await buffer.get_content() == ""
+        assert await buffer.get_list() == []
+        
+        # Test append and content retrieval
         await buffer.append("Hello ")
         await buffer.append("World!")
+        assert await buffer.get_content() == "Hello World!"
         
-        content = await buffer.get_content()
-        assert content == "Hello World!"
-    
-    @pytest.mark.asyncio
-    async def test_get_list(self):
-        """Test getting buffer as list."""
-        buffer = AsyncOutputBuffer()
+        # Test get_list returns ordered items
+        buffer2 = AsyncOutputBuffer()
+        await buffer2.append("Line 1\n")
+        await buffer2.append("Line 2\n")
+        items = await buffer2.get_list()
+        assert items == ["Line 1\n", "Line 2\n"]
         
-        await buffer.append("Line 1\n")
-        await buffer.append("Line 2\n")
-        
-        items = await buffer.get_list()
-        assert len(items) == 2
-        assert items[0] == "Line 1\n"
-        assert items[1] == "Line 2\n"
-    
-    @pytest.mark.asyncio
-    async def test_get_list_returns_copy(self):
-        """Test that get_list returns a copy, not the original."""
-        buffer = AsyncOutputBuffer()
-        
-        await buffer.append("Item 1")
-        items = await buffer.get_list()
-        
-        # Modifying the returned list should not affect the buffer
-        items.append("Item 2")
-        
-        original = await buffer.get_list()
-        assert len(original) == 1
-    
-    @pytest.mark.asyncio
-    async def test_empty_buffer(self):
-        """Test empty buffer returns empty string."""
-        buffer = AsyncOutputBuffer()
-        
-        content = await buffer.get_content()
-        assert content == ""
-        
-        items = await buffer.get_list()
-        assert items == []
+        # Verify get_list returns a copy
+        items.append("Item 3")
+        original = await buffer2.get_list()
+        assert len(original) == 2  # Original unchanged
     
     @pytest.mark.asyncio
     async def test_concurrent_appends(self):
-        """Test that concurrent appends are handled safely."""
+        """
+        Verifies thread safety by running multiple concurrent append operations.
+        All 30 items from 3 concurrent tasks should be captured.
+        """
         buffer = AsyncOutputBuffer()
         
         async def append_items(prefix: str, count: int):
             for i in range(count):
                 await buffer.append(f"{prefix}{i}")
         
-        # Run multiple concurrent append tasks
         await asyncio.gather(
             append_items("A", 10),
             append_items("B", 10),
@@ -79,28 +67,29 @@ class TestAsyncOutputBuffer:
         items = await buffer.get_list()
         assert len(items) == 30
     
-    def test_sync_append(self):
-        """Test synchronous append method."""
+    def test_sync_operations(self):
+        """
+        Tests synchronous append/get operations including:
+        - Basic sync append and content retrieval
+        - Sync get_content returns concatenated buffer
+        """
         buffer = AsyncOutputBuffer()
         
         buffer.append_sync("Hello ")
         buffer.append_sync("World!")
+        assert buffer.get_content_sync() == "Hello World!"
         
-        content = buffer.get_content_sync()
-        assert content == "Hello World!"
-    
-    def test_sync_get_content(self):
-        """Test synchronous get content method."""
-        buffer = AsyncOutputBuffer()
-        
-        buffer.append_sync("Test content")
-        
-        content = buffer.get_content_sync()
-        assert content == "Test content"
+        # Test separate buffer for get_content
+        buffer2 = AsyncOutputBuffer()
+        buffer2.append_sync("Test content")
+        assert buffer2.get_content_sync() == "Test content"
     
     @pytest.mark.asyncio
     async def test_mixed_sync_async(self):
-        """Test mixing sync and async operations."""
+        """
+        Tests interoperability between sync and async operations.
+        Both sync and async appends should work together seamlessly.
+        """
         buffer = AsyncOutputBuffer()
         
         buffer.append_sync("Sync ")
