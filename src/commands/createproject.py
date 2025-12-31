@@ -294,6 +294,22 @@ async def create_project_directory(
     project_path.mkdir(parents=True, exist_ok=True)
     session_log.info(f"Created project directory: {project_path}")
     
+    # Create COPILOT-PROMPT.md with the original prompt for historical purposes
+    prompt_file = project_path / "COPILOT-PROMPT.md"
+    prompt_content = f"""# Copilot Prompt
+
+This file contains the original prompt given to GitHub Copilot to create this project.
+
+## Prompt
+
+{prompt}
+
+---
+*Generated on {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}*
+"""
+    prompt_file.write_text(prompt_content, encoding='utf-8')
+    session_log.info(f"Created COPILOT-PROMPT.md with original prompt")
+    
     return project_path, folder_name
 
 

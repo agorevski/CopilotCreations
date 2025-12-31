@@ -103,11 +103,8 @@ def setup_session_commands(bot: "CopilotBot") -> tuple:
             session.add_message(description)
             session.add_conversation_turn("user", description)
             
-            # Get AI response with clarifying questions
+            # Get AI response with clarifying questions (streaming)
             if refinement_service.is_configured():
-                ai_response = await refinement_service.generate_initial_questions(description)
-                session.add_conversation_turn("assistant", ai_response)
-                
                 # Build header and footer messages
                 desc_preview = description[:200] + ('...' if len(description) > 200 else '')
                 header_msg = (
@@ -124,24 +121,80 @@ def setup_session_commands(bot: "CopilotBot") -> tuple:
                 bot_msg = await interaction.followup.send(header_msg)
                 session.add_bot_message_id(bot_msg.id)
                 
-                # Split AI response and send in chunks
-                ai_chunks = split_message(ai_response)
-                for i, chunk in enumerate(ai_chunks):
-                    # Add footer to the last chunk
-                    if i == len(ai_chunks) - 1:
-                        chunk_with_footer = chunk + footer_msg
-                        # If adding footer exceeds limit, send separately
-                        if len(chunk_with_footer) > MAX_MESSAGE_LENGTH:
-                            bot_msg = await interaction.channel.send(chunk)
-                            session.add_bot_message_id(bot_msg.id)
+                # Stream AI response with 1-second updates
+                streaming_msg = None
+                last_update_time = 0
+                accumulated_response = ""
+                
+                async for response_chunk, is_complete, _ in refinement_service.stream_refinement_response(
+                    [],  # No history for initial questions
+                    description
+                ):
+                    accumulated_response = response_chunk
+                    current_time = asyncio.get_event_loop().time()
+                    
+                    # Update every 1 second or on completion
+                    if is_complete or (current_time - last_update_time >= 1.0):
+                        last_update_time = current_time
+                        
+                        # Format the display message
+                        display_text = accumulated_response
+                        
+                        if len(display_text) > MAX_MESSAGE_LENGTH:
+                            # Show last 2000 chars with indicator
+                            truncated = "..." + display_text[-(MAX_MESSAGE_LENGTH - 3):]
+                            display_content = truncated
+                        else:
+                            display_content = display_text
+                        
+                        if streaming_msg is None:
+                            streaming_msg = await interaction.channel.send(display_content)
+                        else:
+                            try:
+                                await streaming_msg.edit(content=display_content)
+                            except discord.HTTPException as e:
+                                logger.warning(f"Failed to edit streaming message: {e}")
+                
+                session.add_conversation_turn("assistant", accumulated_response)
+                
+                # Handle final response
+                if len(accumulated_response) > MAX_MESSAGE_LENGTH:
+                    # Response too long - delete streaming message and attach as file
+                    if streaming_msg:
+                        try:
+                            await streaming_msg.delete()
+                        except discord.HTTPException:
+                            pass
+                    
+                    file_content = accumulated_response
+                    file = discord.File(
+                        io.BytesIO(file_content.encode('utf-8')),
+                        filename="ai_response.md"
+                    )
+                    bot_msg = await interaction.channel.send(
+                        "🤖 **Response attached** (exceeded Discord character limit)",
+                        file=file
+                    )
+                    session.add_bot_message_id(bot_msg.id)
+                    
+                    # Send footer separately
+                    bot_msg = await interaction.channel.send(footer_msg.strip())
+                    session.add_bot_message_id(bot_msg.id)
+                elif streaming_msg:
+                    # Update final message with footer
+                    final_content = accumulated_response + footer_msg
+                    if len(final_content) > MAX_MESSAGE_LENGTH:
+                        session.add_bot_message_id(streaming_msg.id)
+                        bot_msg = await interaction.channel.send(footer_msg.strip())
+                        session.add_bot_message_id(bot_msg.id)
+                    else:
+                        try:
+                            await streaming_msg.edit(content=final_content)
+                            session.add_bot_message_id(streaming_msg.id)
+                        except discord.HTTPException:
+                            session.add_bot_message_id(streaming_msg.id)
                             bot_msg = await interaction.channel.send(footer_msg.strip())
                             session.add_bot_message_id(bot_msg.id)
-                        else:
-                            bot_msg = await interaction.channel.send(chunk_with_footer)
-                            session.add_bot_message_id(bot_msg.id)
-                    else:
-                        bot_msg = await interaction.channel.send(chunk)
-                        session.add_bot_message_id(bot_msg.id)
             else:
                 bot_msg = await interaction.followup.send(
                     f"📝 **Prompt Session Started!**\n\n"
@@ -418,6 +471,98 @@ def setup_message_listener(bot: "CopilotBot") -> Callable:
     session_manager = get_session_manager()
     refinement_service = get_refinement_service()
     
+    async def _stream_response_to_discord(
+        message: discord.Message,
+        session,
+        content: str
+    ) -> None:
+        """Stream AI response to Discord with 1-second updates.
+        
+        For responses over 2000 chars, shows last 2000 chars until complete,
+        then attaches the full response as a file.
+        """
+        bot_msg = None
+        last_update_time = 0
+        accumulated_response = ""
+        refined_prompt = None
+        
+        async for response_chunk, is_complete, prompt in refinement_service.stream_refinement_response(
+            session.conversation_history[:-1],  # Exclude the just-added message
+            content
+        ):
+            accumulated_response = response_chunk
+            refined_prompt = prompt
+            current_time = asyncio.get_event_loop().time()
+            
+            # Update every 1 second or on completion
+            if is_complete or (current_time - last_update_time >= 1.0):
+                last_update_time = current_time
+                
+                # Format the display message
+                display_text = f"🤖 {accumulated_response}"
+                
+                if len(display_text) > MAX_MESSAGE_LENGTH:
+                    # Show last 2000 chars with indicator
+                    truncated = "..." + display_text[-(MAX_MESSAGE_LENGTH - 3):]
+                    display_content = truncated
+                else:
+                    display_content = display_text
+                
+                if bot_msg is None:
+                    # Send initial message
+                    bot_msg = await message.channel.send(display_content)
+                else:
+                    # Edit existing message
+                    try:
+                        await bot_msg.edit(content=display_content)
+                    except discord.HTTPException as e:
+                        logger.warning(f"Failed to edit streaming message: {e}")
+        
+        # Handle final response
+        session.add_conversation_turn("assistant", accumulated_response)
+        
+        if refined_prompt:
+            session.refined_prompt = refined_prompt
+            # Delete the streaming message and send file attachment
+            if bot_msg:
+                try:
+                    await bot_msg.delete()
+                except discord.HTTPException:
+                    pass
+            
+            file_content = f"# Refined Project Prompt\n\n{refined_prompt}"
+            file = discord.File(
+                io.BytesIO(file_content.encode('utf-8')),
+                filename="refined_prompt.md"
+            )
+            bot_msg = await message.reply(
+                "📋 **Refined Prompt Ready** - See attached file. Type `/buildproject` to create your project.",
+                file=file,
+                mention_author=False
+            )
+            session.add_bot_message_id(bot_msg.id)
+        elif len(f"🤖 {accumulated_response}") > MAX_MESSAGE_LENGTH:
+            # Response too long - delete streaming message and attach as file
+            if bot_msg:
+                try:
+                    await bot_msg.delete()
+                except discord.HTTPException:
+                    pass
+            
+            file_content = accumulated_response
+            file = discord.File(
+                io.BytesIO(file_content.encode('utf-8')),
+                filename="ai_response.md"
+            )
+            bot_msg = await message.channel.send(
+                "🤖 **Response attached** (exceeded Discord character limit)",
+                file=file
+            )
+            session.add_bot_message_id(bot_msg.id)
+        elif bot_msg:
+            # Normal completion - message already updated, just track it
+            session.add_bot_message_id(bot_msg.id)
+    
     @bot.event
     async def on_message(message: discord.Message) -> None:
         """Handle incoming messages for active sessions."""
@@ -456,36 +601,10 @@ def setup_message_listener(bot: "CopilotBot") -> Callable:
             f"{len(content)} chars, {len(content.split())} words"
         )
         
-        # Get AI response if configured
+        # Get AI response if configured - use streaming
         if refinement_service.is_configured():
             async with message.channel.typing():
-                ai_response, refined_prompt = await refinement_service.get_refinement_response(
-                    session.conversation_history[:-1],  # Exclude the just-added message
-                    content
-                )
-                
-                session.add_conversation_turn("assistant", ai_response)
-                
-                if refined_prompt:
-                    session.refined_prompt = refined_prompt
-                    # Send refined prompt as markdown file attachment
-                    file_content = f"# Refined Project Prompt\n\n{refined_prompt}"
-                    file = discord.File(
-                        io.BytesIO(file_content.encode('utf-8')),
-                        filename="refined_prompt.md"
-                    )
-                    bot_msg = await message.reply(
-                        "📋 **Refined Prompt Ready** - See attached file. Type `/buildproject` to create your project.",
-                        file=file,
-                        mention_author=False
-                    )
-                    session.add_bot_message_id(bot_msg.id)
-                else:
-                    # Send the AI response, splitting into multiple messages if needed
-                    ai_chunks = split_message(f"🤖 {ai_response}")
-                    for chunk in ai_chunks:
-                        bot_msg = await message.channel.send(chunk)
-                        session.add_bot_message_id(bot_msg.id)
+                await _stream_response_to_discord(message, session, content)
         else:
             # Just acknowledge the message
             word_count = session.get_word_count()

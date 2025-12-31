@@ -790,8 +790,12 @@ class TestStartprojectWithDescription:
         
         mock_rs = MagicMock()
         mock_rs.is_configured.return_value = True
-        # Long response that will need splitting
-        mock_rs.generate_initial_questions = AsyncMock(return_value="Q" * 3000)
+        
+        # Create async generator mock for streaming
+        long_response = "Q" * 3000
+        async def mock_stream(*args, **kwargs):
+            yield (long_response, True, None)
+        mock_rs.stream_refinement_response = mock_stream
         
         mock_msg = AsyncMock()
         mock_msg.id = 111
@@ -817,7 +821,7 @@ class TestStartprojectWithDescription:
                 
                 await handler(mock_interaction, "Build a complex app")
         
-        # Should have sent multiple messages
+        # Should have sent multiple messages (header + streaming + potentially file)
         assert mock_interaction.channel.send.call_count >= 1
 
 
@@ -845,6 +849,7 @@ class TestBuildprojectFullFlow:
         mock_session.conversation_history = [{"role": "user", "content": "test"}]
         mock_session.get_full_user_input.return_value = "test prompt"
         mock_session.message_ids = []
+        mock_session.refined_prompt = None  # No pre-refined prompt
         
         mock_sm = MagicMock()
         mock_sm.get_session = AsyncMock(return_value=mock_session)
@@ -885,6 +890,7 @@ class TestBuildprojectFullFlow:
         mock_session.conversation_history = []
         mock_session.get_full_user_input.return_value = "raw user input"
         mock_session.message_ids = []
+        mock_session.refined_prompt = None  # No pre-refined prompt
         
         mock_sm = MagicMock()
         mock_sm.get_session = AsyncMock(return_value=mock_session)
@@ -925,6 +931,7 @@ class TestBuildprojectFullFlow:
         mock_session.conversation_history = []
         mock_session.get_full_user_input.return_value = "x" * 600000  # > MAX_PROMPT_LENGTH
         mock_session.message_ids = []
+        mock_session.refined_prompt = None  # No pre-refined prompt
         
         mock_sm = MagicMock()
         mock_sm.get_session = AsyncMock(return_value=mock_session)
@@ -1020,10 +1027,11 @@ class TestMessageListenerAIResponse:
         
         mock_rs = MagicMock()
         mock_rs.is_configured.return_value = True
-        mock_rs.get_refinement_response = AsyncMock(return_value=(
-            "Prompt ready!",
-            "# Refined prompt content"
-        ))
+        
+        # Create async generator mock for streaming
+        async def mock_stream(*args, **kwargs):
+            yield ("Prompt ready!", True, "# Refined prompt content")
+        mock_rs.stream_refinement_response = mock_stream
         
         with patch('src.commands.session_commands.get_session_manager', return_value=mock_sm):
             with patch('src.commands.session_commands.get_refinement_service', return_value=mock_rs):
@@ -1053,10 +1061,14 @@ class TestMessageListenerAIResponse:
                 mock_reply = AsyncMock()
                 mock_reply.id = 222
                 mock_message.reply = AsyncMock(return_value=mock_reply)
+                # Need to provide send for initial streaming message
+                mock_send_msg = AsyncMock()
+                mock_send_msg.id = 333
+                mock_message.channel.send = AsyncMock(return_value=mock_send_msg)
                 
                 await captured_handler(mock_message)
         
-        # Should have sent the refined prompt as file
+        # Should have sent the refined prompt as file via reply
         mock_message.reply.assert_called_once()
         assert mock_session.refined_prompt == "# Refined prompt content"
     
@@ -1076,10 +1088,11 @@ class TestMessageListenerAIResponse:
         
         mock_rs = MagicMock()
         mock_rs.is_configured.return_value = True
-        mock_rs.get_refinement_response = AsyncMock(return_value=(
-            "What framework do you want?",
-            None
-        ))
+        
+        # Create async generator mock for streaming
+        async def mock_stream(*args, **kwargs):
+            yield ("What framework do you want?", True, None)
+        mock_rs.stream_refinement_response = mock_stream
         
         with patch('src.commands.session_commands.get_session_manager', return_value=mock_sm):
             with patch('src.commands.session_commands.get_refinement_service', return_value=mock_rs):
@@ -1112,7 +1125,7 @@ class TestMessageListenerAIResponse:
                 
                 await captured_handler(mock_message)
         
-        # Should have sent the AI response
+        # Should have sent the AI response via streaming (send is called for initial message)
         mock_message.channel.send.assert_called_once()
     
     @pytest.mark.asyncio

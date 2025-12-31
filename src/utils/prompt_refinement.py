@@ -7,7 +7,7 @@ and iterative improvement of project descriptions.
 
 import asyncio
 from functools import partial
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, AsyncGenerator
 
 from openai import AzureOpenAI
 
@@ -177,6 +177,99 @@ class PromptRefinementService:
             return (
                 f"⚠️ Error communicating with AI: {str(e)[:100]}. "
                 "Your message has been saved. Try again or type `/buildproject` to proceed.",
+                None
+            )
+    
+    async def stream_refinement_response(
+        self,
+        conversation_history: List[Dict[str, str]],
+        user_message: str
+    ) -> AsyncGenerator[Tuple[str, bool, Optional[str]], None]:
+        """Stream a refinement response from the AI assistant.
+        
+        Yields chunks of the response as they arrive from the API.
+        
+        Args:
+            conversation_history: Previous conversation turns.
+            user_message: The latest user message.
+            
+        Yields:
+            Tuple of (accumulated_response, is_complete, refined_prompt_if_ready).
+        """
+        if not self.is_configured():
+            logger.warning("Azure OpenAI not configured for prompt refinement")
+            yield (
+                "⚠️ AI refinement is not configured. Your messages are being collected. "
+                "Type `/buildproject` when ready to create your project.",
+                True,
+                None
+            )
+            return
+        
+        try:
+            # Build messages array with system prompt
+            messages = [
+                {"role": "system", "content": self._get_system_prompt()}
+            ]
+            
+            # Add conversation history
+            messages.extend(conversation_history)
+            
+            # Add the new user message
+            messages.append({"role": "user", "content": user_message})
+            
+            logger.info("Starting streaming prompt refinement from Azure OpenAI...")
+            
+            # Run synchronous streaming API call in thread pool
+            loop = asyncio.get_event_loop()
+            
+            # Create the streaming response
+            stream = await loop.run_in_executor(
+                None,
+                partial(
+                    self.client.chat.completions.create,
+                    model=self.deployment_name,
+                    messages=messages,
+                    max_completion_tokens=50000,
+                    temperature=0.7,
+                    stream=True
+                )
+            )
+            
+            accumulated_response = ""
+            
+            # Process chunks from the stream
+            for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    accumulated_response += content
+                    yield (accumulated_response, False, None)
+            
+            # Final yield with complete response
+            if not accumulated_response:
+                logger.warning("Azure OpenAI returned empty streaming response")
+                yield ("I'm having trouble processing that. Could you try rephrasing?", True, None)
+                return
+            
+            # Check if a refined prompt is ready
+            refined_prompt = None
+            if "refined prompt ready" in accumulated_response.lower():
+                refined_prompt = await self._extract_refined_prompt(
+                    conversation_history + [
+                        {"role": "user", "content": user_message},
+                        {"role": "assistant", "content": accumulated_response}
+                    ]
+                )
+            
+            logger.info(f"Completed streaming refinement response ({len(accumulated_response)} chars)")
+            yield (accumulated_response, True, refined_prompt)
+            
+        except Exception as e:
+            logger.error(f"Failed to stream refinement response: {type(e).__name__}: {e}")
+            yield (
+                f"⚠️ Error communicating with AI: {str(e)[:100]}. "
+                "Your message has been saved. Try again or type `/buildproject` to proceed.",
+                True,
                 None
             )
     
