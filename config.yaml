@@ -182,3 +182,76 @@ prompt_refinement_system: |
   "📋 **Refined Prompt Ready** - Type `/buildproject` to create your project, or continue chatting to refine further."
 
   Keep responses under 500 words during Q&A (staying within Discord's 2000 character limit when possible). The final specification can be longer but should be broken into multiple messages if needed.
+
+# System prompt for the extraction phase (used by technical writer role)
+prompt_extraction_system: |
+  You are a technical writer creating project specifications.
+
+# Extraction prompt used to generate final project specification from conversation
+prompt_extraction: |
+  Based on the conversation above, generate an EXHAUSTIVE project specification that leaves ZERO ambiguity.
+
+  You MUST include ALL of the following sections with EXPLICIT details:
+
+  ## PROJECT SPECIFICATION
+
+  ### 1. Project Overview
+  [One paragraph describing what this project does and its primary purpose]
+
+  ### 2. Tech Stack (EXPLICIT)
+  - Language: [exact language and version]
+  - Framework: [exact framework and version]
+  - Database: [exact database type]
+  - Additional tools: [list each dependency with its purpose]
+
+  ### 3. Feature List (EXHAUSTIVE)
+  For EACH feature discussed:
+  - **Feature Name**: [Clear description]
+    - User story: "As a [user], I want to [action] so that [benefit]"
+    - Acceptance criteria: [numbered list of TESTABLE criteria]
+    - API endpoint (if applicable): [METHOD /path with request/response shapes]
+
+  ### 4. Data Model
+  [Entity definitions with ALL fields, their types, constraints, and relationships]
+
+  ### 5. Architecture & Design Patterns
+  - Directory structure: [explicit tree showing every folder and key files]
+  - Design patterns: [list each pattern to use with rationale]
+  - Module responsibilities: [which module handles what functionality]
+
+  ### 6. Authentication & Authorization
+  [Exact auth mechanism, user types/roles, permissions for each role]
+
+  ### 7. Error Handling Strategy
+  [How errors are caught, logged, formatted, and returned to users]
+
+  ### 8. Configuration & Environment
+  [List ALL environment variables with descriptions and example values]
+
+  ### 9. Testing Requirements
+  - Unit test targets: [specific functions/modules to test]
+  - Minimum coverage: [percentage]
+  - Integration test scenarios: [list key scenarios]
+  - Test data approach: [how to seed/mock]
+
+  ### 10. Deployment & CI/CD
+  - Container: [Dockerfile requirements]
+  - CI pipeline steps: [exact workflow steps]
+  - Environment configs: [differences between dev/staging/prod]
+
+  ### 11. Non-Functional Requirements
+  - Performance targets: [specific response times, throughput]
+  - Security measures: [input validation, rate limiting, CORS, etc.]
+  - Logging: [format, what to log, log levels]
+
+  ### 12. Implementation Order
+  [Numbered sequence of what to build first, with dependencies noted]
+
+  CRITICAL RULES:
+  - NEVER use vague words like "appropriate", "as needed", "standard" - be EXPLICIT
+  - If something wasn't discussed, make a sensible decision and STATE IT CLEARLY
+  - Every feature must have testable acceptance criteria
+  - The output must be directly usable by Claude Opus 4.5 with NO follow-up questions needed
+  - Include concrete examples and specific values wherever possible
+
+  Do not include any conversational text or explanations. Output ONLY the specification.

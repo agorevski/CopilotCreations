@@ -16,43 +16,10 @@ from ..config import (
     AZURE_OPENAI_API_KEY,
     AZURE_OPENAI_DEPLOYMENT_NAME,
     AZURE_OPENAI_API_VERSION,
-    get_prompt_template
+    get_prompt_template,
+    get_required_prompt_template
 )
 from .logging import logger
-
-
-# Default system prompt for the refinement assistant
-DEFAULT_REFINEMENT_SYSTEM_PROMPT = """You are an elite software architect and requirements analyst. Your mission is to transform vague project ideas into exhaustive, crystal-clear specifications that leave ZERO ambiguity for implementation.
-
-When a user describes a project idea:
-1. Ask 3-5 targeted clarifying questions per round (2-4 rounds total)
-2. Cover: exact functionality, tech stack, data model, API design, auth, error handling, deployment, testing
-3. Offer sensible defaults when asking questions
-4. If user says "you decide", make explicit decisions and state them clearly
-5. Never leave ambiguity - be EXPLICIT about every detail
-
-When ready, produce a specification with these sections:
-- Project Overview
-- Tech Stack (exact versions)
-- Feature List with acceptance criteria
-- Data Model with all fields and relationships
-- Architecture & Design Patterns
-- Authentication & Authorization
-- Error Handling Strategy
-- Configuration & Environment Variables
-- Testing Requirements (coverage %, specific scenarios)
-- Deployment & CI/CD
-- Non-Functional Requirements
-- Implementation Order
-
-NEVER use vague terms like "appropriate", "as needed", "standard" - be EXPLICIT.
-Every feature must have testable acceptance criteria.
-The final prompt must work with Claude Opus 4.5 with zero follow-up questions.
-
-When you believe you have enough information, end your response with:
-"📋 **Refined Prompt Ready** - Type `/buildproject` to create your project, or continue chatting to refine further."
-
-Keep responses under 500 words during Q&A. The final specification can be longer."""
 
 
 class PromptRefinementService:
@@ -83,8 +50,7 @@ class PromptRefinementService:
     
     def _get_system_prompt(self) -> str:
         """Get the system prompt for the refinement assistant."""
-        custom_prompt = get_prompt_template('prompt_refinement_system')
-        return custom_prompt if custom_prompt else DEFAULT_REFINEMENT_SYSTEM_PROMPT
+        return get_required_prompt_template('prompt_refinement_system')
     
     async def get_refinement_response(
         self,
@@ -254,12 +220,23 @@ class PromptRefinementService:
             # Check if a refined prompt is ready
             refined_prompt = None
             if "refined prompt ready" in accumulated_response.lower():
-                refined_prompt = await self._extract_refined_prompt(
+                # Stream the extraction phase with visual feedback
+                extraction_prefix = accumulated_response + "\n\n📋 **Generating detailed specification...**\n\n"
+                extraction_accumulated = ""
+                
+                async for chunk in self._stream_extract_refined_prompt(
                     conversation_history + [
                         {"role": "user", "content": user_message},
                         {"role": "assistant", "content": accumulated_response}
                     ]
-                )
+                ):
+                    extraction_accumulated = chunk
+                    # Yield combined response showing extraction progress
+                    yield (extraction_prefix + extraction_accumulated, False, None)
+                
+                if extraction_accumulated:
+                    refined_prompt = extraction_accumulated.strip()
+                    logger.info(f"Extracted refined prompt ({len(refined_prompt)} chars)")
             
             logger.info(f"Completed streaming refinement response ({len(accumulated_response)} chars)")
             yield (accumulated_response, True, refined_prompt)
@@ -288,75 +265,11 @@ class PromptRefinementService:
             return None
         
         try:
-            extraction_prompt = """Based on the conversation above, generate an EXHAUSTIVE project specification that leaves ZERO ambiguity.
-
-You MUST include ALL of the following sections with EXPLICIT details:
-
-## PROJECT SPECIFICATION
-
-### 1. Project Overview
-[One paragraph describing what this project does and its primary purpose]
-
-### 2. Tech Stack (EXPLICIT)
-- Language: [exact language and version]
-- Framework: [exact framework and version]
-- Database: [exact database type]
-- Additional tools: [list each dependency with its purpose]
-
-### 3. Feature List (EXHAUSTIVE)
-For EACH feature discussed:
-- **Feature Name**: [Clear description]
-  - User story: "As a [user], I want to [action] so that [benefit]"
-  - Acceptance criteria: [numbered list of TESTABLE criteria]
-  - API endpoint (if applicable): [METHOD /path with request/response shapes]
-
-### 4. Data Model
-[Entity definitions with ALL fields, their types, constraints, and relationships]
-
-### 5. Architecture & Design Patterns
-- Directory structure: [explicit tree showing every folder and key files]
-- Design patterns: [list each pattern to use with rationale]
-- Module responsibilities: [which module handles what functionality]
-
-### 6. Authentication & Authorization
-[Exact auth mechanism, user types/roles, permissions for each role]
-
-### 7. Error Handling Strategy
-[How errors are caught, logged, formatted, and returned to users]
-
-### 8. Configuration & Environment
-[List ALL environment variables with descriptions and example values]
-
-### 9. Testing Requirements
-- Unit test targets: [specific functions/modules to test]
-- Minimum coverage: [percentage]
-- Integration test scenarios: [list key scenarios]
-- Test data approach: [how to seed/mock]
-
-### 10. Deployment & CI/CD
-- Container: [Dockerfile requirements]
-- CI pipeline steps: [exact workflow steps]
-- Environment configs: [differences between dev/staging/prod]
-
-### 11. Non-Functional Requirements
-- Performance targets: [specific response times, throughput]
-- Security measures: [input validation, rate limiting, CORS, etc.]
-- Logging: [format, what to log, log levels]
-
-### 12. Implementation Order
-[Numbered sequence of what to build first, with dependencies noted]
-
-CRITICAL RULES:
-- NEVER use vague words like "appropriate", "as needed", "standard" - be EXPLICIT
-- If something wasn't discussed, make a sensible decision and STATE IT CLEARLY
-- Every feature must have testable acceptance criteria
-- The output must be directly usable by Claude Opus 4.5 with NO follow-up questions needed
-- Include concrete examples and specific values wherever possible
-
-Do not include any conversational text or explanations. Output ONLY the specification."""
+            extraction_prompt = get_required_prompt_template('prompt_extraction')
+            extraction_system = get_required_prompt_template('prompt_extraction_system')
 
             messages = [
-                {"role": "system", "content": "You are a technical writer creating project specifications."}
+                {"role": "system", "content": extraction_system}
             ]
             messages.extend(conversation_history)
             messages.append({"role": "user", "content": extraction_prompt})
@@ -386,6 +299,67 @@ Do not include any conversational text or explanations. Output ONLY the specific
         except Exception as e:
             logger.error(f"Failed to extract refined prompt: {type(e).__name__}: {e}")
             return None
+    
+    async def _stream_extract_refined_prompt(
+        self, 
+        conversation_history: List[Dict[str, str]]
+    ) -> AsyncGenerator[str, None]:
+        """Stream extract a refined prompt from the conversation history.
+        
+        This makes a streaming API call to summarize the conversation into a final prompt.
+        Yields accumulated content as it arrives for real-time display.
+        
+        Args:
+            conversation_history: The full conversation history.
+            
+        Yields:
+            Accumulated refined prompt content as it streams.
+        """
+        if not self.is_configured():
+            return
+        
+        try:
+            extraction_prompt = get_required_prompt_template('prompt_extraction')
+            extraction_system = get_required_prompt_template('prompt_extraction_system')
+
+            messages = [
+                {"role": "system", "content": extraction_system}
+            ]
+            messages.extend(conversation_history)
+            messages.append({"role": "user", "content": extraction_prompt})
+            
+            logger.info("Starting streaming prompt extraction from Azure OpenAI...")
+            
+            # Run synchronous streaming API call in thread pool
+            loop = asyncio.get_event_loop()
+            stream = await loop.run_in_executor(
+                None,
+                partial(
+                    self.client.chat.completions.create,
+                    model=self.deployment_name,
+                    messages=messages,
+                    max_completion_tokens=50000,
+                    temperature=0.3,
+                    stream=True
+                )
+            )
+            
+            accumulated_response = ""
+            
+            # Process chunks from the stream
+            for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    accumulated_response += content
+                    yield accumulated_response
+            
+            if accumulated_response:
+                logger.info(f"Completed streaming extraction ({len(accumulated_response)} chars)")
+            else:
+                logger.warning("Streaming extraction returned empty response")
+            
+        except Exception as e:
+            logger.error(f"Failed to stream extract refined prompt: {type(e).__name__}: {e}")
     
     async def generate_initial_questions(self, project_description: str) -> str:
         """Generate initial clarifying questions for a project description.

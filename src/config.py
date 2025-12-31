@@ -91,6 +91,24 @@ def get_prompt_template(command_name: str) -> str:
     return PROMPT_TEMPLATES.get(command_name, "")
 
 
+def get_required_prompt_template(command_name: str) -> str:
+    """Get a required prompt template for a specific command.
+    
+    Args:
+        command_name: The name of the command (e.g., 'prompt_refinement_system')
+        
+    Returns:
+        The prompt template string.
+        
+    Raises:
+        ValueError: If the template is not found in config.yaml.
+    """
+    template = PROMPT_TEMPLATES.get(command_name, "")
+    if not template:
+        raise ValueError(f"Required prompt template '{command_name}' not found in config.yaml")
+    return template
+
+
 def is_initialized() -> bool:
     """Check if configuration has been initialized."""
     return _initialized
