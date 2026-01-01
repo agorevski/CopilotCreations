@@ -30,6 +30,7 @@ from ..config import (
     PROMPT_LOG_TRUNCATE_LENGTH,
     PROMPT_SUMMARY_TRUNCATE_LENGTH,
     UNIQUE_ID_LENGTH,
+    MAX_FOLDER_NAME_LENGTH,
     PROGRESS_LOG_INTERVAL_SECONDS,
     GITHUB_ENABLED,
     GITHUB_REPO_PRIVATE,
@@ -285,9 +286,21 @@ async def create_project_directory(
     else:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         unique_id = str(uuid.uuid4())[:UNIQUE_ID_LENGTH]
-        folder_name = f"{username}_{timestamp}_{unique_id}"
+        # Calculate max username length to fit within MAX_FOLDER_NAME_LENGTH
+        # Format: {username}_{timestamp}_{unique_id}
+        # timestamp is 15 chars (YYYYMMDD_HHMMSS), unique_id is UNIQUE_ID_LENGTH chars
+        # Plus 2 underscores = 17 + UNIQUE_ID_LENGTH fixed chars
+        fixed_chars = 15 + UNIQUE_ID_LENGTH + 2  # timestamp + unique_id + underscores
+        max_username_len = MAX_FOLDER_NAME_LENGTH - fixed_chars
+        truncated_username = username[:max_username_len] if len(username) > max_username_len else username
+        folder_name = f"{truncated_username}_{timestamp}_{unique_id}"
         if naming_generator.is_configured():
             session_log.info("Falling back to standard naming format")
+    
+    # Final safety check - truncate folder name if still too long
+    if len(folder_name) > MAX_FOLDER_NAME_LENGTH:
+        folder_name = folder_name[:MAX_FOLDER_NAME_LENGTH]
+        session_log.info(f"Truncated folder name to {MAX_FOLDER_NAME_LENGTH} chars")
     
     project_path = PROJECTS_DIR / folder_name
     

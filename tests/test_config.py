@@ -18,6 +18,7 @@ from src.config import (
     PROMPT_LOG_TRUNCATE_LENGTH,
     PROMPT_SUMMARY_TRUNCATE_LENGTH,
     UNIQUE_ID_LENGTH,
+    MAX_FOLDER_NAME_LENGTH,
     PROGRESS_LOG_INTERVAL_SECONDS,
     GITHUB_REPO_PRIVATE,
     MAX_PARALLEL_REQUESTS,
@@ -90,11 +91,15 @@ class TestConfigValues:
         """
         Tests other configuration constants:
         - UNIQUE_ID_LENGTH (8)
+        - MAX_FOLDER_NAME_LENGTH (50)
         - GITHUB_REPO_PRIVATE is boolean
         - MAX_PARALLEL_REQUESTS is positive integer
         """
         assert UNIQUE_ID_LENGTH > 0
         assert UNIQUE_ID_LENGTH == 8
+        
+        assert MAX_FOLDER_NAME_LENGTH > 0
+        assert MAX_FOLDER_NAME_LENGTH == 50
         
         assert isinstance(GITHUB_REPO_PRIVATE, bool)
         

@@ -404,7 +404,7 @@ class TestNamingConstants:
         from src.utils.naming import MAX_REPO_NAME_LENGTH, naming_generator
         
         assert isinstance(MAX_REPO_NAME_LENGTH, int)
-        assert MAX_REPO_NAME_LENGTH == 50
+        assert MAX_REPO_NAME_LENGTH == 30  # Reduced from 50 to avoid Windows path length issues
         
         assert isinstance(MAX_DESCRIPTION_LENGTH, int)
         assert MAX_DESCRIPTION_LENGTH == 350

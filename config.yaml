@@ -41,7 +41,7 @@ repository_naming_prompt: |
   - Memorable and quippy
   - Related to what the project does
   - All lowercase with hyphens between words (e.g., "pixel-wizard", "turbo-toaster")
-  - Between 2-4 words maximum
+  - MAXIMUM 2-3 words and under 25 characters total (this is critical to avoid path length issues)
   - Safe for work and professional
   
   Respond with ONLY the repository name, nothing else. No explanations, no quotes, no markdown formatting, just the plain text name.

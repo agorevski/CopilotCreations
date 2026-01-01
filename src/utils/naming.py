@@ -21,7 +21,7 @@ from .logging import logger
 
 
 # Constants
-MAX_REPO_NAME_LENGTH = 50
+MAX_REPO_NAME_LENGTH = 30  # Keep creative names short to avoid Windows path limits
 MAX_DESCRIPTION_LENGTH = 350
 
 

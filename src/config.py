@@ -145,6 +145,9 @@ PROMPT_SUMMARY_TRUNCATE_LENGTH = 200
 # Unique ID generation
 UNIQUE_ID_LENGTH = 8
 
+# Folder name limits (Windows MAX_PATH is 260, leave room for nested files)
+MAX_FOLDER_NAME_LENGTH = 50  # Max length for project folder name
+
 # Progress logging interval in seconds
 PROGRESS_LOG_INTERVAL_SECONDS = 30
 
