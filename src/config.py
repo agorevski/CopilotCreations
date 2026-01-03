@@ -2,11 +2,15 @@
 Configuration settings for the Discord Copilot Bot.
 """
 
+import logging
 import os
 from pathlib import Path
 
 import yaml
 from dotenv import load_dotenv
+
+# Module-level logger for config warnings
+_config_logger = logging.getLogger("copilot_bot")
 
 # Load environment variables (safe - just reads .env file)
 load_dotenv()
@@ -43,48 +47,45 @@ PROMPT_TEMPLATES: dict = {}
 
 def init_config() -> None:
     """Initialize configuration by creating required directories and loading config.yaml.
-    
+
     This function should be called once at application startup.
     It's safe to call multiple times.
     """
     global _initialized, PROMPT_TEMPLATES
-    
+
     if _initialized:
         return
-    
+
     # Create projects directory
     PROJECTS_DIR.mkdir(exist_ok=True)
-    
+
     # Load prompt templates from config.yaml
     if CONFIG_YAML_PATH.exists():
         try:
-            with open(CONFIG_YAML_PATH, 'r', encoding='utf-8') as f:
+            with open(CONFIG_YAML_PATH, "r", encoding="utf-8") as f:
                 PROMPT_TEMPLATES.update(yaml.safe_load(f) or {})
         except yaml.YAMLError as e:
-            import logging
-            logging.getLogger("copilot_bot").warning(
+            _config_logger.warning(
                 f"Failed to parse config.yaml: {e}. Using empty templates."
             )
         except IOError as e:
-            import logging
-            logging.getLogger("copilot_bot").warning(
+            _config_logger.warning(
                 f"Failed to read config.yaml: {e}. Using empty templates."
             )
         except Exception as e:
-            import logging
-            logging.getLogger("copilot_bot").warning(
+            _config_logger.warning(
                 f"Unexpected error loading config.yaml: {type(e).__name__}: {e}. Using empty templates."
             )
-    
+
     _initialized = True
 
 
 def get_prompt_template(command_name: str) -> str:
     """Get the prompt template for a specific command.
-    
+
     Args:
         command_name: The name of the command (e.g., 'createproject')
-        
+
     Returns:
         The prompt template string, or empty string if not found.
     """
@@ -93,19 +94,21 @@ def get_prompt_template(command_name: str) -> str:
 
 def get_required_prompt_template(command_name: str) -> str:
     """Get a required prompt template for a specific command.
-    
+
     Args:
         command_name: The name of the command (e.g., 'prompt_refinement_system')
-        
+
     Returns:
         The prompt template string.
-        
+
     Raises:
         ValueError: If the template is not found in config.yaml.
     """
     template = PROMPT_TEMPLATES.get(command_name, "")
     if not template:
-        raise ValueError(f"Required prompt template '{command_name}' not found in config.yaml")
+        raise ValueError(
+            f"Required prompt template '{command_name}' not found in config.yaml"
+        )
     return template
 
 
@@ -113,15 +116,19 @@ def is_initialized() -> bool:
     """Check if configuration has been initialized."""
     return _initialized
 
-# Timeout Configuration
-TIMEOUT_MINUTES = int(os.getenv("TIMEOUT_MINUTES", "30"))
+
+# Timeout Configuration (with bounds validation)
+_raw_timeout_minutes = int(os.getenv("TIMEOUT_MINUTES", "30"))
+TIMEOUT_MINUTES = max(1, min(120, _raw_timeout_minutes))  # 1-120 minutes
 TIMEOUT_SECONDS = TIMEOUT_MINUTES * 60
 
-# Git operation timeout (default 5 minutes for large repos)
-GIT_OPERATION_TIMEOUT_SECONDS = int(os.getenv("GIT_OPERATION_TIMEOUT_SECONDS", "300"))
+# Git operation timeout (default 5 minutes for large repos, max 30 minutes)
+_raw_git_timeout = int(os.getenv("GIT_OPERATION_TIMEOUT_SECONDS", "300"))
+GIT_OPERATION_TIMEOUT_SECONDS = max(30, min(1800, _raw_git_timeout))  # 30s-30min
 
-# Parallelism Configuration
-MAX_PARALLEL_REQUESTS = int(os.getenv("MAX_PARALLEL_REQUESTS", "2"))
+# Parallelism Configuration (with bounds validation)
+_raw_parallel_requests = int(os.getenv("MAX_PARALLEL_REQUESTS", "2"))
+MAX_PARALLEL_REQUESTS = max(1, min(10, _raw_parallel_requests))  # 1-10 concurrent
 
 # Discord Message Configuration
 UPDATE_INTERVAL = 3  # seconds - unified message update interval
@@ -135,7 +142,8 @@ COPILOT_DEFAULT_FLAGS = [
     "--allow-all-paths",
     "--allow-all-tools",
     "--allow-all-urls",
-    "--log-level", "debug"
+    "--log-level",
+    "debug",
 ]
 
 # Prompt truncation lengths for display
@@ -153,7 +161,13 @@ PROGRESS_LOG_INTERVAL_SECONDS = 30
 
 # Input validation
 MAX_PROMPT_LENGTH = 500000  # 500k chars (~75,000 words) for session-based prompts
-MODEL_NAME_PATTERN = r'^[a-zA-Z0-9\-_.]+$'
+MODEL_NAME_PATTERN = r"^[a-zA-Z0-9\-_.]+$"
 
-# Session configuration
-SESSION_TIMEOUT_MINUTES = int(os.getenv("SESSION_TIMEOUT_MINUTES", "30"))
+# Session configuration (with bounds validation)
+_raw_session_timeout = int(os.getenv("SESSION_TIMEOUT_MINUTES", "30"))
+SESSION_TIMEOUT_MINUTES = max(5, min(120, _raw_session_timeout))  # 5-120 minutes
+
+# Azure OpenAI API Parameters (centralized constants)
+AI_MAX_COMPLETION_TOKENS = 50000
+AI_REFINEMENT_TEMPERATURE = 0.7  # Higher creativity for conversational refinement
+AI_EXTRACTION_TEMPERATURE = 0.3  # Lower temperature for structured extraction

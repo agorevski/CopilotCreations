@@ -374,3 +374,101 @@ The following anti-patterns were addressed:
 5. ✅ **Missing Type Hints** - Added type hints for `bot` parameter in session_commands.py functions
 
 6. ✅ **Inconsistent Error Handling** - Improved with named constants for error codes
+
+## 14. Excessive Mocking in Tests
+
+**Location:** `tests/` directory (especially `test_createproject.py`, `test_session_commands.py`)
+
+**Problem:**
+The test suite relies heavily on `unittest.mock.MagicMock` (360+ occurrences). Tests mock internal components like `bot`, `interaction`, `process_registry`, and `session_manager` rather than testing behavior. This makes tests brittle; refactoring internal implementation often breaks tests even if external behavior remains correct.
+
+**Example:**
+```python
+# tests/test_createproject.py
+mock_bot = MagicMock()
+mock_bot.tree = MagicMock()
+mock_bot.tree.command = MagicMock(return_value=lambda f: f)
+interaction.user = MagicMock()
+```
+
+**Recommendation:**
+*   Use **Fakes** or **Stubs** for external dependencies instead of mocks.
+*   Test against public interfaces.
+*   Use a real `CopilotBot` instance with a fake Discord client for integration tests.
+
+---
+
+## 15. Primitive Obsession
+
+**Location:** `src/commands/createproject.py`, `src/commands/session_commands.py`
+
+**Problem:**
+Domain concepts are passed around as loose collections of primitive types (strings, bools, paths) rather than encapsulated objects. Functions take long lists of arguments representing the state of a project build.
+
+**Example:**
+```python
+# src/commands/createproject.py
+async def update_final_message(
+    unified_msg, project_path, output_buffer, interaction,
+    prompt, model, timed_out, error_occurred, error_message,
+    process, github_status, ...
+)
+```
+
+**Recommendation:**
+Introduce domain objects to encapsulate state:
+*   `ProjectBuildState` class to hold status, paths, errors, and process info.
+*   `ProjectConfiguration` class to hold user inputs (prompt, model, options).
+
+---
+
+## 16. Inconsistent Error Handling
+
+**Location:** Throughout codebase (30+ instances of `except Exception`)
+
+**Problem:**
+Broad exception catching (`except Exception`) is used frequently. This can swallow unexpected bugs (like `NameError` or `AttributeError`) and treat them as runtime failures, making debugging difficult.
+
+**Example:**
+```python
+# src/commands/createproject.py
+except Exception as e:
+    session_log.error(f"Failed to create project directory: {e}")
+```
+
+**Recommendation:**
+*   Catch specific exceptions (e.g., `OSError`, `asyncio.TimeoutError`, `discord.DiscordException`).
+*   Let unexpected exceptions bubble up to a global error handler or crash the specific task so they are noticed.
+
+---
+
+## 17. Leaky Abstractions (Git/CLI Operations)
+
+**Location:** `src/utils/github.py`, `src/commands/createproject.py`
+
+**Problem:**
+The application interacts with external tools (Git, Copilot CLI) by constructing raw command strings and managing subprocesses directly. Authentication secrets are manually injected into URLs and scrubbed from logs. This is error-prone and insecure.
+
+**Example:**
+```python
+# src/utils/github.py
+remote_url = f"https://{user.login}:{self.token}@github.com/{user.login}/{repo_name}.git"
+git_commands = [["git", "remote", "add", "origin", remote_url], ...]
+```
+
+**Recommendation:**
+*   Use a dedicated library for Git operations (e.g., `GitPython` or `pygit2`) instead of shell commands.
+*   Abstract the "Copilot CLI" into a `CopilotClient` class that handles the subprocess management and output parsing internally.
+
+---
+
+## 18. Low Cohesion (Manager Classes)
+
+**Location:** `src/utils/github.py`, `src/utils/session_manager.py`
+
+**Problem:**
+The usage of "Manager" classes (`GitHubManager`, `SessionManager`) often indicates a lack of specific domain modeling. These classes tend to become "buckets" for loosely related functionality.
+
+**Recommendation:**
+*   Rename `SessionManager` to `SessionRepository` (if it stores sessions) or `SessionService` (if it coordinates actions).
+*   Split `GitHubManager` into focused responsibilities: `RepositoryCreator`, `GitUploader`, `GitHubAuthenticator`.
