@@ -2,7 +2,7 @@
 
 This document catalogs engineering anti-patterns identified in the codebase, along with recommendations for remediation.
 
-**Last Updated:** 2025-12-30
+**Last Updated:** 2025-01-03
 
 ---
 
@@ -374,6 +374,30 @@ The following anti-patterns were addressed:
 5. ✅ **Missing Type Hints** - Added type hints for `bot` parameter in session_commands.py functions
 
 6. ✅ **Inconsistent Error Handling** - Improved with named constants for error codes
+
+## Recently Fixed (2025-01-03)
+
+The following anti-patterns were addressed:
+
+7. ✅ **Duplicate Imports (#6)** - Consolidated duplicate config imports in `session_commands.py`
+
+8. ✅ **Missing Configuration Validation (#7)** - Added bounds checking for `TIMEOUT_MINUTES` (1-120), `MAX_PARALLEL_REQUESTS` (1-10), and `SESSION_EXPIRY_MINUTES` (5-1440) in `config.py`
+
+9. ✅ **Hardcoded AI Model Parameters (#5)** - Extracted to named constants in `config.py`: `MAX_COMPLETION_TOKENS`, `REFINEMENT_TEMPERATURE`, `EXTRACTION_TEMPERATURE`, `NAMING_TEMPERATURE`
+
+10. ✅ **Duplicated Azure OpenAI Call Pattern (#11)** - Created `AzureOpenAIClient` class in `src/utils/azure_openai_client.py` with common wrapper for API calls. Refactored `naming.py` and `prompt_refinement.py` to use it.
+
+11. ✅ **God Function Anti-Pattern (#3)** - Split `createproject.py` (848→260 lines) by extracting helper functions to `createproject_helpers.py` (650+ lines). Functions extracted:
+    - Message building: `_generate_folder_structure_section()`, `_generate_copilot_output_section()`, `_generate_summary_section()`, `_build_unified_message()`, `update_unified_message()`
+    - Process management: `read_stream()`, `run_copilot_process()`
+    - Project lifecycle: `create_project_directory()`, `send_initial_message()`, `update_final_message()`
+    - GitHub integration: `handle_github_integration()`
+    - Cleanup: `_handle_remove_readonly()`, `cleanup_project_directory()`, `_send_log_file()`
+
+12. ✅ **Primitive Obsession (#15)** - Created domain objects in `src/utils/project_creation.py`:
+    - `ProjectBuildState` dataclass for build status, paths, errors, process info
+    - `ProjectConfiguration` dataclass for user inputs (prompt, model, options)
+    - `ProjectCreationService` class to orchestrate project builds
 
 ## 14. Excessive Mocking in Tests
 

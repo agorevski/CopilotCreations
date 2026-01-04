@@ -8,16 +8,11 @@ repository names based on project descriptions using Azure OpenAI GPT models.
 import re
 from typing import Optional, Protocol
 
-from openai import AzureOpenAI
-
 from ..config import (
-    AZURE_OPENAI_ENDPOINT,
-    AZURE_OPENAI_API_KEY,
-    AZURE_OPENAI_DEPLOYMENT_NAME,
-    AZURE_OPENAI_API_VERSION,
     AI_MAX_COMPLETION_TOKENS,
     get_prompt_template,
 )
+from .azure_openai_client import AzureOpenAIClient
 from .logging import logger
 
 
@@ -60,26 +55,43 @@ class RepositoryNamingGenerator:
             deployment_name: Azure OpenAI deployment name. Defaults to config value.
             api_version: Azure OpenAI API version. Defaults to config value.
         """
-        self.endpoint = endpoint or AZURE_OPENAI_ENDPOINT
-        self.api_key = api_key or AZURE_OPENAI_API_KEY
-        self.deployment_name = deployment_name or AZURE_OPENAI_DEPLOYMENT_NAME
-        self.api_version = api_version or AZURE_OPENAI_API_VERSION
-        self._client: Optional[AzureOpenAI] = None
+        # Use the shared Azure OpenAI client
+        self._ai_client = AzureOpenAIClient(
+            endpoint=endpoint,
+            api_key=api_key,
+            deployment_name=deployment_name,
+            api_version=api_version,
+        )
+
+    # Proxy properties for backwards compatibility with tests
+    @property
+    def endpoint(self) -> Optional[str]:
+        """Azure OpenAI endpoint URL."""
+        return self._ai_client.endpoint
 
     @property
-    def client(self) -> Optional[AzureOpenAI]:
-        """Lazy-load the Azure OpenAI client."""
-        if self._client is None and self.is_configured():
-            self._client = AzureOpenAI(
-                azure_endpoint=self.endpoint,
-                api_key=self.api_key,
-                api_version=self.api_version,
-            )
-        return self._client
+    def api_key(self) -> Optional[str]:
+        """Azure OpenAI API key."""
+        return self._ai_client.api_key
+
+    @property
+    def deployment_name(self) -> Optional[str]:
+        """Azure OpenAI deployment name."""
+        return self._ai_client.deployment_name
+
+    @property
+    def api_version(self) -> Optional[str]:
+        """Azure OpenAI API version."""
+        return self._ai_client.api_version
+
+    @property
+    def client(self):
+        """Azure OpenAI client (lazy-loaded)."""
+        return self._ai_client.client
 
     def is_configured(self) -> bool:
         """Check if Azure OpenAI integration is properly configured."""
-        return bool(self.endpoint and self.api_key and self.deployment_name)
+        return self._ai_client.is_configured()
 
     def _sanitize_name(self, name: str) -> str:
         """Sanitize the generated name to be a valid repository name.
@@ -159,53 +171,43 @@ class RepositoryNamingGenerator:
             logger.warning("Azure OpenAI not configured for repository naming")
             return None
 
-        try:
-            # Get the naming prompt from config
-            prompt_template = get_prompt_template("repository_naming_prompt")
-            if not prompt_template:
-                prompt_template = (
-                    "Generate a single creative, fun, and playful repository name. "
-                    "Respond with ONLY the name, nothing else. Project description:"
-                )
-
-            full_prompt = f"{prompt_template} {project_description}"
-
-            logger.info("Generating creative repository name using Azure OpenAI...")
-
-            messages = [
-                {
-                    "role": "system",
-                    "content": "You are a creative naming assistant. You generate short, memorable, fun repository names.",
-                },
-                {"role": "user", "content": full_prompt},
-            ]
-
-            response = self.client.chat.completions.create(
-                model=self.deployment_name,
-                messages=messages,
-                max_completion_tokens=AI_MAX_COMPLETION_TOKENS,
-                stop=None,
-                stream=False,
+        # Get the naming prompt from config
+        prompt_template = get_prompt_template("repository_naming_prompt")
+        if not prompt_template:
+            prompt_template = (
+                "Generate a single creative, fun, and playful repository name. "
+                "Respond with ONLY the name, nothing else. Project description:"
             )
 
-            raw_name = response.choices[0].message.content
-            logger.info(f"GPT Response (naming): {raw_name}")
-            if not raw_name:
-                logger.warning("Azure OpenAI returned empty response")
-                return None
+        full_prompt = f"{prompt_template} {project_description}"
 
-            sanitized_name = self._sanitize_name(raw_name)
+        logger.info("Generating creative repository name using Azure OpenAI...")
 
-            if not sanitized_name:
-                logger.warning(f"Sanitization resulted in empty name from: {raw_name}")
-                return None
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a creative naming assistant. You generate short, memorable, fun repository names.",
+            },
+            {"role": "user", "content": full_prompt},
+        ]
 
-            logger.info(f"Generated repository name: {sanitized_name}")
-            return sanitized_name
+        raw_name = self._ai_client.complete_sync(
+            messages=messages,
+            max_tokens=AI_MAX_COMPLETION_TOKENS,
+            log_prefix="Naming",
+        )
 
-        except Exception as e:
-            logger.error(f"Failed to generate repository name: {type(e).__name__}: {e}")
+        if not raw_name:
             return None
+
+        sanitized_name = self._sanitize_name(raw_name)
+
+        if not sanitized_name:
+            logger.warning(f"Sanitization resulted in empty name from: {raw_name}")
+            return None
+
+        logger.info(f"Generated repository name: {sanitized_name}")
+        return sanitized_name
 
     def generate_description(self, project_description: str) -> Optional[str]:
         """Generate a repository description based on the project description.
@@ -220,58 +222,46 @@ class RepositoryNamingGenerator:
             logger.warning("Azure OpenAI not configured for description generation")
             return None
 
-        try:
-            # Get the description prompt from config
-            prompt_template = get_prompt_template("repository_description_prompt")
-            if not prompt_template:
-                prompt_template = (
-                    "Generate a brief, professional description for a GitHub repository. "
-                    "Keep it under 200 characters. Respond with ONLY the description. "
-                    "Project description:"
-                )
-
-            full_prompt = f"{prompt_template} {project_description}"
-
-            logger.info("Generating repository description using Azure OpenAI...")
-
-            messages = [
-                {
-                    "role": "system",
-                    "content": "You are a technical writer. You generate concise, professional repository descriptions.",
-                },
-                {"role": "user", "content": full_prompt},
-            ]
-
-            response = self.client.chat.completions.create(
-                model=self.deployment_name,
-                messages=messages,
-                max_completion_tokens=AI_MAX_COMPLETION_TOKENS,
-                stop=None,
-                stream=False,
+        # Get the description prompt from config
+        prompt_template = get_prompt_template("repository_description_prompt")
+        if not prompt_template:
+            prompt_template = (
+                "Generate a brief, professional description for a GitHub repository. "
+                "Keep it under 200 characters. Respond with ONLY the description. "
+                "Project description:"
             )
 
-            raw_description = response.choices[0].message.content
-            logger.info(f"GPT Response (description): {raw_description}")
-            if not raw_description:
-                logger.warning("Azure OpenAI returned empty description")
-                return None
+        full_prompt = f"{prompt_template} {project_description}"
 
-            sanitized_description = self._sanitize_description(raw_description)
+        logger.info("Generating repository description using Azure OpenAI...")
 
-            if not sanitized_description:
-                logger.warning(
-                    f"Sanitization resulted in empty description from: {raw_description}"
-                )
-                return None
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a technical writer. You generate concise, professional repository descriptions.",
+            },
+            {"role": "user", "content": full_prompt},
+        ]
 
-            logger.info(f"Generated repository description: {sanitized_description}")
-            return sanitized_description
+        raw_description = self._ai_client.complete_sync(
+            messages=messages,
+            max_tokens=AI_MAX_COMPLETION_TOKENS,
+            log_prefix="Description",
+        )
 
-        except Exception as e:
-            logger.error(
-                f"Failed to generate repository description: {type(e).__name__}: {e}"
+        if not raw_description:
+            return None
+
+        sanitized_description = self._sanitize_description(raw_description)
+
+        if not sanitized_description:
+            logger.warning(
+                f"Sanitization resulted in empty description from: {raw_description}"
             )
             return None
+
+        logger.info(f"Generated repository description: {sanitized_description}")
+        return sanitized_description
 
 
 # Singleton instance for easy access

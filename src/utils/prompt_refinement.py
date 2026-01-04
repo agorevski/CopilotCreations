@@ -5,23 +5,14 @@ This module provides AI-assisted prompt refinement through clarifying questions
 and iterative improvement of project descriptions.
 """
 
-import asyncio
-from functools import partial
 from typing import List, Dict, Optional, Tuple, AsyncGenerator
 
-from openai import AzureOpenAI
-
 from ..config import (
-    AZURE_OPENAI_ENDPOINT,
-    AZURE_OPENAI_API_KEY,
-    AZURE_OPENAI_DEPLOYMENT_NAME,
-    AZURE_OPENAI_API_VERSION,
-    AI_MAX_COMPLETION_TOKENS,
     AI_REFINEMENT_TEMPERATURE,
     AI_EXTRACTION_TEMPERATURE,
-    get_prompt_template,
     get_required_prompt_template,
 )
+from .azure_openai_client import AzureOpenAIClient
 from .logging import logger
 
 
@@ -30,26 +21,48 @@ class PromptRefinementService:
 
     def __init__(self):
         """Initialize the refinement service with Azure OpenAI credentials."""
-        self.endpoint = AZURE_OPENAI_ENDPOINT
-        self.api_key = AZURE_OPENAI_API_KEY
-        self.deployment_name = AZURE_OPENAI_DEPLOYMENT_NAME
-        self.api_version = AZURE_OPENAI_API_VERSION
-        self._client: Optional[AzureOpenAI] = None
+        # Use the shared Azure OpenAI client
+        self._ai_client = AzureOpenAIClient()
+
+    # Proxy properties for backwards compatibility with tests
+    @property
+    def endpoint(self) -> Optional[str]:
+        """Azure OpenAI endpoint URL."""
+        return self._ai_client.endpoint
+
+    @endpoint.setter
+    def endpoint(self, value: Optional[str]) -> None:
+        """Set Azure OpenAI endpoint URL."""
+        self._ai_client.endpoint = value
 
     @property
-    def client(self) -> Optional[AzureOpenAI]:
-        """Lazy-load the Azure OpenAI client."""
-        if self._client is None and self.is_configured():
-            self._client = AzureOpenAI(
-                azure_endpoint=self.endpoint,
-                api_key=self.api_key,
-                api_version=self.api_version,
-            )
-        return self._client
+    def api_key(self) -> Optional[str]:
+        """Azure OpenAI API key."""
+        return self._ai_client.api_key
+
+    @api_key.setter
+    def api_key(self, value: Optional[str]) -> None:
+        """Set Azure OpenAI API key."""
+        self._ai_client.api_key = value
+
+    @property
+    def deployment_name(self) -> Optional[str]:
+        """Azure OpenAI deployment name."""
+        return self._ai_client.deployment_name
+
+    @deployment_name.setter
+    def deployment_name(self, value: Optional[str]) -> None:
+        """Set Azure OpenAI deployment name."""
+        self._ai_client.deployment_name = value
+
+    @property
+    def client(self):
+        """Azure OpenAI client (lazy-loaded)."""
+        return self._ai_client.client
 
     def is_configured(self) -> bool:
         """Check if Azure OpenAI integration is properly configured."""
-        return bool(self.endpoint and self.api_key and self.deployment_name)
+        return self._ai_client.is_configured()
 
     def _get_system_prompt(self) -> str:
         """Get the system prompt for the refinement assistant."""
@@ -76,86 +89,38 @@ class PromptRefinementService:
                 None,
             )
 
-        try:
-            # Build messages array with system prompt
-            messages = [{"role": "system", "content": self._get_system_prompt()}]
+        # Build messages array with system prompt
+        messages = [{"role": "system", "content": self._get_system_prompt()}]
+        messages.extend(conversation_history)
+        messages.append({"role": "user", "content": user_message})
 
-            # Add conversation history
-            messages.extend(conversation_history)
+        logger.info("Requesting prompt refinement from Azure OpenAI...")
 
-            # Add the new user message
-            messages.append({"role": "user", "content": user_message})
+        assistant_response = await self._ai_client.complete_async(
+            messages=messages,
+            temperature=AI_REFINEMENT_TEMPERATURE,
+            log_prefix="Refinement",
+        )
 
-            logger.info("Requesting prompt refinement from Azure OpenAI...")
-
-            # Run synchronous API call in thread pool to avoid blocking event loop
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None,
-                partial(
-                    self.client.chat.completions.create,
-                    model=self.deployment_name,
-                    messages=messages,
-                    max_completion_tokens=AI_MAX_COMPLETION_TOKENS,
-                    temperature=AI_REFINEMENT_TEMPERATURE,
-                    stream=False,
-                ),
-            )
-
-            # Log full response details for debugging
-            if response.choices:
-                choice = response.choices[0]
-                logger.info(f"GPT Response - finish_reason: {choice.finish_reason}")
-                if choice.message:
-                    logger.info(
-                        f"GPT Response - content length: {len(choice.message.content) if choice.message.content else 0}"
-                    )
-                    if choice.message.refusal:
-                        logger.warning(
-                            f"GPT Response - refusal: {choice.message.refusal}"
-                        )
-            else:
-                logger.warning("GPT Response - no choices returned")
-
-            assistant_response = response.choices[0].message.content
-            logger.info(f"GPT Response (refinement): {assistant_response}")
-            if not assistant_response:
-                # Log additional details when empty
-                logger.warning("Azure OpenAI returned empty response")
-                if response.choices[0].finish_reason:
-                    logger.warning(
-                        f"Finish reason: {response.choices[0].finish_reason}"
-                    )
-                if hasattr(response, "usage") and response.usage:
-                    logger.warning(
-                        f"Token usage - prompt: {response.usage.prompt_tokens}, completion: {response.usage.completion_tokens}"
-                    )
-                return (
-                    "I'm having trouble processing that. Could you try rephrasing?",
-                    None,
-                )
-
-            # Check if a refined prompt is ready (look for the marker)
-            refined_prompt = None
-            if "refined prompt ready" in assistant_response.lower():
-                refined_prompt = await self._extract_refined_prompt(
-                    conversation_history
-                    + [
-                        {"role": "user", "content": user_message},
-                        {"role": "assistant", "content": assistant_response},
-                    ]
-                )
-
-            logger.info("Received refinement response from Azure OpenAI")
-            return (assistant_response, refined_prompt)
-
-        except Exception as e:
-            logger.error(f"Failed to get refinement response: {type(e).__name__}: {e}")
+        if not assistant_response:
             return (
-                f"⚠️ Error communicating with AI: {str(e)[:100]}. "
-                "Your message has been saved. Try again or type `/buildproject` to proceed.",
+                "I'm having trouble processing that. Could you try rephrasing?",
                 None,
             )
+
+        # Check if a refined prompt is ready (look for the marker)
+        refined_prompt = None
+        if "refined prompt ready" in assistant_response.lower():
+            refined_prompt = await self._extract_refined_prompt(
+                conversation_history
+                + [
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": assistant_response},
+                ]
+            )
+
+        logger.info("Received refinement response from Azure OpenAI")
+        return (assistant_response, refined_prompt)
 
     async def stream_refinement_response(
         self, conversation_history: List[Dict[str, str]], user_message: str
@@ -181,95 +146,60 @@ class PromptRefinementService:
             )
             return
 
-        try:
-            # Build messages array with system prompt
-            messages = [{"role": "system", "content": self._get_system_prompt()}]
+        # Build messages array with system prompt
+        messages = [{"role": "system", "content": self._get_system_prompt()}]
+        messages.extend(conversation_history)
+        messages.append({"role": "user", "content": user_message})
 
-            # Add conversation history
-            messages.extend(conversation_history)
+        logger.info("Starting streaming prompt refinement from Azure OpenAI...")
 
-            # Add the new user message
-            messages.append({"role": "user", "content": user_message})
+        accumulated_response = ""
+        async for chunk in self._ai_client.stream_async(
+            messages=messages,
+            temperature=AI_REFINEMENT_TEMPERATURE,
+            log_prefix="Refinement",
+        ):
+            accumulated_response = chunk
+            yield (accumulated_response, False, None)
 
-            logger.info("Starting streaming prompt refinement from Azure OpenAI...")
-
-            # Run synchronous streaming API call in thread pool
-            loop = asyncio.get_event_loop()
-
-            # Create the streaming response
-            stream = await loop.run_in_executor(
-                None,
-                partial(
-                    self.client.chat.completions.create,
-                    model=self.deployment_name,
-                    messages=messages,
-                    max_completion_tokens=AI_MAX_COMPLETION_TOKENS,
-                    temperature=AI_REFINEMENT_TEMPERATURE,
-                    stream=True,
-                ),
-            )
-
-            accumulated_response = ""
-
-            # Process chunks from the stream
-            for chunk in stream:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    content = chunk.choices[0].delta.content
-                    accumulated_response += content
-                    yield (accumulated_response, False, None)
-
-            # Final yield with complete response
-            if not accumulated_response:
-                logger.warning("Azure OpenAI returned empty streaming response")
-                yield (
-                    "I'm having trouble processing that. Could you try rephrasing?",
-                    True,
-                    None,
-                )
-                return
-
-            # Check if a refined prompt is ready
-            refined_prompt = None
-            if "refined prompt ready" in accumulated_response.lower():
-                # Stream the extraction phase with visual feedback
-                extraction_prefix = (
-                    accumulated_response
-                    + "\n\n📋 **Generating detailed specification...**\n\n"
-                )
-                extraction_accumulated = ""
-
-                async for chunk in self._stream_extract_refined_prompt(
-                    conversation_history
-                    + [
-                        {"role": "user", "content": user_message},
-                        {"role": "assistant", "content": accumulated_response},
-                    ]
-                ):
-                    extraction_accumulated = chunk
-                    # Yield combined response showing extraction progress
-                    yield (extraction_prefix + extraction_accumulated, False, None)
-
-                if extraction_accumulated:
-                    refined_prompt = extraction_accumulated.strip()
-                    logger.info(
-                        f"Extracted refined prompt ({len(refined_prompt)} chars)"
-                    )
-
-            logger.info(
-                f"Completed streaming refinement response ({len(accumulated_response)} chars)"
-            )
-            yield (accumulated_response, True, refined_prompt)
-
-        except Exception as e:
-            logger.error(
-                f"Failed to stream refinement response: {type(e).__name__}: {e}"
-            )
+        # Handle empty response
+        if not accumulated_response:
             yield (
-                f"⚠️ Error communicating with AI: {str(e)[:100]}. "
-                "Your message has been saved. Try again or type `/buildproject` to proceed.",
+                "I'm having trouble processing that. Could you try rephrasing?",
                 True,
                 None,
             )
+            return
+
+        # Check if a refined prompt is ready
+        refined_prompt = None
+        if "refined prompt ready" in accumulated_response.lower():
+            # Stream the extraction phase with visual feedback
+            extraction_prefix = (
+                accumulated_response
+                + "\n\n📋 **Generating detailed specification...**\n\n"
+            )
+            extraction_accumulated = ""
+
+            async for chunk in self._stream_extract_refined_prompt(
+                conversation_history
+                + [
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": accumulated_response},
+                ]
+            ):
+                extraction_accumulated = chunk
+                # Yield combined response showing extraction progress
+                yield (extraction_prefix + extraction_accumulated, False, None)
+
+            if extraction_accumulated:
+                refined_prompt = extraction_accumulated.strip()
+                logger.info(f"Extracted refined prompt ({len(refined_prompt)} chars)")
+
+        logger.info(
+            f"Completed streaming refinement response ({len(accumulated_response)} chars)"
+        )
+        yield (accumulated_response, True, refined_prompt)
 
     async def _extract_refined_prompt(
         self, conversation_history: List[Dict[str, str]]
@@ -287,39 +217,24 @@ class PromptRefinementService:
         if not self.is_configured():
             return None
 
-        try:
-            extraction_prompt = get_required_prompt_template("prompt_extraction")
-            extraction_system = get_required_prompt_template("prompt_extraction_system")
+        extraction_prompt = get_required_prompt_template("prompt_extraction")
+        extraction_system = get_required_prompt_template("prompt_extraction_system")
 
-            messages = [{"role": "system", "content": extraction_system}]
-            messages.extend(conversation_history)
-            messages.append({"role": "user", "content": extraction_prompt})
+        messages = [{"role": "system", "content": extraction_system}]
+        messages.extend(conversation_history)
+        messages.append({"role": "user", "content": extraction_prompt})
 
-            # Run synchronous API call in thread pool to avoid blocking event loop
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None,
-                partial(
-                    self.client.chat.completions.create,
-                    model=self.deployment_name,
-                    messages=messages,
-                    max_completion_tokens=AI_MAX_COMPLETION_TOKENS,
-                    temperature=AI_EXTRACTION_TEMPERATURE,
-                    stream=False,
-                ),
-            )
+        refined_prompt = await self._ai_client.complete_async(
+            messages=messages,
+            temperature=AI_EXTRACTION_TEMPERATURE,
+            log_prefix="Extraction",
+        )
 
-            refined_prompt = response.choices[0].message.content
-            logger.info(f"GPT Response (extraction): {refined_prompt}")
-            if refined_prompt:
-                logger.info(f"Extracted refined prompt ({len(refined_prompt)} chars)")
-                return refined_prompt.strip()
+        if refined_prompt:
+            logger.info(f"Extracted refined prompt ({len(refined_prompt)} chars)")
+            return refined_prompt.strip()
 
-            return None
-
-        except Exception as e:
-            logger.error(f"Failed to extract refined prompt: {type(e).__name__}: {e}")
-            return None
+        return None
 
     async def _stream_extract_refined_prompt(
         self, conversation_history: List[Dict[str, str]]
@@ -338,50 +253,21 @@ class PromptRefinementService:
         if not self.is_configured():
             return
 
-        try:
-            extraction_prompt = get_required_prompt_template("prompt_extraction")
-            extraction_system = get_required_prompt_template("prompt_extraction_system")
+        extraction_prompt = get_required_prompt_template("prompt_extraction")
+        extraction_system = get_required_prompt_template("prompt_extraction_system")
 
-            messages = [{"role": "system", "content": extraction_system}]
-            messages.extend(conversation_history)
-            messages.append({"role": "user", "content": extraction_prompt})
+        messages = [{"role": "system", "content": extraction_system}]
+        messages.extend(conversation_history)
+        messages.append({"role": "user", "content": extraction_prompt})
 
-            logger.info("Starting streaming prompt extraction from Azure OpenAI...")
+        logger.info("Starting streaming prompt extraction from Azure OpenAI...")
 
-            # Run synchronous streaming API call in thread pool
-            loop = asyncio.get_event_loop()
-            stream = await loop.run_in_executor(
-                None,
-                partial(
-                    self.client.chat.completions.create,
-                    model=self.deployment_name,
-                    messages=messages,
-                    max_completion_tokens=AI_MAX_COMPLETION_TOKENS,
-                    temperature=AI_EXTRACTION_TEMPERATURE,
-                    stream=True,
-                ),
-            )
-
-            accumulated_response = ""
-
-            # Process chunks from the stream
-            for chunk in stream:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    content = chunk.choices[0].delta.content
-                    accumulated_response += content
-                    yield accumulated_response
-
-            if accumulated_response:
-                logger.info(
-                    f"Completed streaming extraction ({len(accumulated_response)} chars)"
-                )
-            else:
-                logger.warning("Streaming extraction returned empty response")
-
-        except Exception as e:
-            logger.error(
-                f"Failed to stream extract refined prompt: {type(e).__name__}: {e}"
-            )
+        async for chunk in self._ai_client.stream_async(
+            messages=messages,
+            temperature=AI_EXTRACTION_TEMPERATURE,
+            log_prefix="Extraction",
+        ):
+            yield chunk
 
     async def generate_initial_questions(self, project_description: str) -> str:
         """Generate initial clarifying questions for a project description.
