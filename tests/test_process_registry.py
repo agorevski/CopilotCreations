@@ -16,10 +16,11 @@ class TestProcessRegistry:
     """Tests for ProcessRegistry class covering registration, unregistration, and killing."""
     
     def test_initialization(self):
-        """
-        Tests registry initialization:
-        - Empty process set
-        - Active count starts at 0
+        """Tests that ProcessRegistry initializes with empty state.
+
+        Verifies:
+            - Process set is empty on creation.
+            - Active count starts at 0.
         """
         registry = ProcessRegistry()
         assert registry._processes == set()
@@ -27,13 +28,14 @@ class TestProcessRegistry:
     
     @pytest.mark.asyncio
     async def test_register_and_unregister(self):
-        """
-        Tests async register/unregister operations:
-        - Register single process
-        - Register multiple processes
-        - Unregister removes from set
-        - Unregister non-existent doesn't raise
-        - Active count tracks correctly
+        """Tests async register and unregister operations.
+
+        Verifies:
+            - Register adds a single process to the registry.
+            - Register adds multiple processes correctly.
+            - Unregister removes process from the set.
+            - Unregister on non-existent process doesn't raise.
+            - Active count tracks correctly throughout operations.
         """
         registry = ProcessRegistry()
         
@@ -65,14 +67,15 @@ class TestProcessRegistry:
     
     @pytest.mark.asyncio
     async def test_kill_all_async(self):
-        """
-        Tests async kill_all operations:
-        - Empty registry doesn't raise
-        - Kills running processes
-        - Skips already completed processes
-        - Handles timeout during wait
-        - Handles exceptions during kill
-        - Clears registry after kill
+        """Tests async kill_all method terminates all registered processes.
+
+        Verifies:
+            - Empty registry doesn't raise an error.
+            - Running processes are killed.
+            - Already completed processes are skipped.
+            - Timeout during wait is handled gracefully.
+            - Exceptions during kill are caught and handled.
+            - Registry is cleared after kill_all completes.
         """
         registry = ProcessRegistry()
         
@@ -138,12 +141,13 @@ class TestProcessRegistry:
         assert registry4.active_count == 0
     
     def test_kill_all_sync(self):
-        """
-        Tests sync kill_all_sync operations:
-        - Empty registry doesn't raise
-        - Kills running processes
-        - Skips completed processes
-        - Handles exceptions
+        """Tests synchronous kill_all_sync method terminates all registered processes.
+
+        Verifies:
+            - Empty registry doesn't raise an error.
+            - Running processes are killed synchronously.
+            - Completed processes are skipped.
+            - Exceptions during kill are handled gracefully.
         """
         registry = ProcessRegistry()
         
@@ -191,7 +195,12 @@ class TestProcessRegistry:
         assert registry3.active_count == 0
     
     def test_active_count_property(self):
-        """Tests active_count property tracks process count correctly."""
+        """Tests that active_count property correctly tracks process count.
+
+        Verifies:
+            - Count increases when processes are added.
+            - Count decreases when processes are removed.
+        """
         registry = ProcessRegistry()
         
         p1, p2, p3 = MagicMock(), MagicMock(), MagicMock()
@@ -213,10 +222,11 @@ class TestGetProcessRegistry:
     """Tests for get_process_registry singleton function."""
     
     def test_singleton_behavior(self):
-        """
-        Tests singleton behavior:
-        - Returns ProcessRegistry instance
-        - Returns same instance on repeated calls
+        """Tests that get_process_registry returns a singleton instance.
+
+        Verifies:
+            - Returns a ProcessRegistry instance.
+            - Returns the same instance on repeated calls.
         """
         import src.utils.process_registry as pr_module
         pr_module._process_registry = None  # Reset
@@ -232,9 +242,11 @@ class TestProcessRegistryIntegration:
     """Integration tests for process registry with signal handlers and concurrency."""
     
     def test_signal_handler_integration(self):
-        """
-        Tests signal handler can access process registry.
-        Registry is lazily accessed on signal receipt.
+        """Tests that signal handler can access process registry.
+
+        Verifies:
+            - Registry is lazily accessed on signal receipt.
+            - get_process_registry is not called until signal is received.
         """
         from src.bot import setup_signal_handlers, create_bot
         import src.utils.process_registry as pr_module
@@ -251,13 +263,20 @@ class TestProcessRegistryIntegration:
     
     @pytest.mark.asyncio
     async def test_concurrent_access(self):
-        """
-        Tests thread safety with concurrent register/unregister operations.
-        All processes should be properly unregistered after concurrent ops.
+        """Tests thread safety with concurrent register/unregister operations.
+
+        Verifies:
+            - Concurrent operations don't cause race conditions.
+            - All processes are properly unregistered after concurrent ops.
         """
         registry = ProcessRegistry()
         
         async def register_and_unregister(pid: int):
+            """Register and unregister a mock process.
+
+            Args:
+                pid: The process ID to assign to the mock process.
+            """
             mock_process = MagicMock()
             mock_process.pid = pid
             await registry.register(mock_process)

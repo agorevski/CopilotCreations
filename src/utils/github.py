@@ -39,7 +39,12 @@ class RepositoryService(Protocol):
     """Protocol for repository services (enables dependency injection)."""
     
     def is_configured(self) -> bool:
-        """Check if the repository service is properly configured."""
+        """Check if the repository service is properly configured.
+
+        Returns:
+            bool: True if the service is properly configured with all
+                required credentials and settings, False otherwise.
+        """
         ...
     
     def create_repository(
@@ -48,7 +53,19 @@ class RepositoryService(Protocol):
         description: str = "",
         private: bool = False
     ) -> Tuple[bool, str, Optional[str]]:
-        """Create a new repository."""
+        """Create a new repository.
+
+        Args:
+            repo_name: Name for the new repository.
+            description: Repository description. Defaults to empty string.
+            private: Whether the repository should be private. Defaults to False.
+
+        Returns:
+            Tuple[bool, str, Optional[str]]: A tuple containing:
+                - success: Whether the repository was created successfully.
+                - message: A status message or error description.
+                - clone_url: The repository clone URL if successful, None otherwise.
+        """
         ...
     
     def create_and_push_project(
@@ -58,7 +75,20 @@ class RepositoryService(Protocol):
         description: str = "",
         private: bool = False
     ) -> Tuple[bool, str, Optional[str]]:
-        """Create a repository and push project files."""
+        """Create a repository and push project files.
+
+        Args:
+            project_path: Path to the project directory to push.
+            repo_name: Name for the repository.
+            description: Repository description. Defaults to empty string.
+            private: Whether the repository should be private. Defaults to False.
+
+        Returns:
+            Tuple[bool, str, Optional[str]]: A tuple containing:
+                - success: Whether the operation completed successfully.
+                - message: A status message or error description.
+                - repo_url: The repository URL if successful, None otherwise.
+        """
         ...
 
 
@@ -88,7 +118,12 @@ class GitHubManager:
     
     @property
     def github(self) -> Optional[Github]:
-        """Lazy-load the GitHub client."""
+        """Lazy-load the GitHub client.
+
+        Returns:
+            Optional[Github]: The authenticated GitHub client instance,
+                or None if GitHub integration is disabled or no token is set.
+        """
         if not self.enabled:
             return None
         if self._github is None and self.token:
@@ -96,17 +131,26 @@ class GitHubManager:
         return self._github
     
     def is_configured(self) -> bool:
-        """Check if GitHub integration is properly configured."""
+        """Check if GitHub integration is properly configured.
+
+        Returns:
+            bool: True if GitHub is enabled and both token and username are set,
+                False otherwise.
+        """
         return bool(self.enabled and self.token and self.username)
     
     def sanitize_description(self, description: str) -> str:
         """Sanitize a repository description for GitHub.
-        
+
+        Removes control characters, non-printable characters, and special unicode.
+        Truncates to GitHub's maximum description length if needed.
+
         Args:
-            description: The raw description text.
-            
+            description: The raw description text to sanitize.
+
         Returns:
-            A sanitized description suitable for a GitHub repository.
+            str: A sanitized description suitable for a GitHub repository,
+                containing only ASCII printable characters.
         """
         import re
         
@@ -133,14 +177,15 @@ class GitHubManager:
         return description
     
     def copy_gitignore(self, project_path: Path) -> bool:
-        """
-        Copy the root .gitignore to the project directory.
-        
+        """Copy the root .gitignore to the project directory.
+
         Args:
-            project_path: Path to the project directory
-            
+            project_path: Path to the project directory where .gitignore
+                will be copied.
+
         Returns:
-            True if successful, False otherwise
+            bool: True if the .gitignore was successfully copied,
+                False if the source file doesn't exist or an error occurred.
         """
         source_gitignore = self._base_dir / ".gitignore"
         dest_gitignore = project_path / ".gitignore"
@@ -163,16 +208,18 @@ class GitHubManager:
         description: str = "",
         private: bool = False
     ) -> Tuple[bool, str, Optional[str]]:
-        """
-        Create a new GitHub repository.
-        
+        """Create a new GitHub repository.
+
         Args:
-            repo_name: Name for the new repository
-            description: Repository description
-            private: Whether the repository should be private
-            
+            repo_name: Name for the new repository.
+            description: Repository description. Defaults to empty string.
+            private: Whether the repository should be private. Defaults to False.
+
         Returns:
-            Tuple of (success, message, clone_url)
+            Tuple[bool, str, Optional[str]]: A tuple containing:
+                - success: Whether the repository was created successfully.
+                - message: A status message or error description.
+                - clone_url: The repository clone URL if successful, None otherwise.
         """
         if not self.is_configured():
             logger.warning("GitHub integration not configured - missing token or username")
@@ -233,16 +280,21 @@ class GitHubManager:
         repo_name: str,
         commit_message: str = "Initial commit from Discord Copilot Bot"
     ) -> Tuple[bool, str]:
-        """
-        Initialize a git repository and push to GitHub.
-        
+        """Initialize a git repository and push to GitHub.
+
+        Initializes a new git repository in the project directory, configures
+        the user identity, commits all files, and pushes to the remote repository.
+
         Args:
-            project_path: Path to the project directory
-            repo_name: Name of the GitHub repository
-            commit_message: Commit message for initial commit
-            
+            project_path: Path to the project directory to initialize.
+            repo_name: Name of the GitHub repository to push to.
+            commit_message: Commit message for the initial commit.
+                Defaults to "Initial commit from Discord Copilot Bot".
+
         Returns:
-            Tuple of (success, message)
+            Tuple[bool, str]: A tuple containing:
+                - success: Whether the operation completed successfully.
+                - message: A status message or error description.
         """
         if not self.is_configured():
             logger.warning("GitHub integration not configured for init_and_push")
@@ -328,17 +380,24 @@ class GitHubManager:
         description: str = "",
         private: bool = False
     ) -> Tuple[bool, str, Optional[str]]:
-        """
-        Complete workflow: copy .gitignore, create repo, init git, and push.
-        
+        """Complete workflow: copy .gitignore, create repo, init git, and push.
+
+        Performs the complete project setup workflow:
+        1. Copies .gitignore to the project directory
+        2. Creates a new GitHub repository
+        3. Initializes git and pushes all files
+
         Args:
-            project_path: Path to the project directory
-            repo_name: Name for the GitHub repository
-            description: Repository description
-            private: Whether the repository should be private
-            
+            project_path: Path to the project directory to push.
+            repo_name: Name for the GitHub repository.
+            description: Repository description. Defaults to empty string.
+            private: Whether the repository should be private. Defaults to False.
+
         Returns:
-            Tuple of (success, message, github_url)
+            Tuple[bool, str, Optional[str]]: A tuple containing:
+                - success: Whether the entire workflow completed successfully.
+                - message: A status message or error description.
+                - github_url: The GitHub repository URL if successful, None otherwise.
         """
         logger.info(f"Starting create_and_push_project workflow for '{repo_name}'")
         logger.debug(f"  project_path: {project_path}")

@@ -18,11 +18,19 @@ class TestPromptRefinementService:
 
     @pytest.fixture
     def service(self):
-        """Create a fresh refinement service for each test."""
+        """Create a fresh refinement service for each test.
+
+        Returns:
+            PromptRefinementService: A new instance of the refinement service.
+        """
         return PromptRefinementService()
 
     def test_is_configured_false_when_missing_endpoint(self, service):
-        """Test is_configured returns False when endpoint is missing."""
+        """Test is_configured returns False when endpoint is missing.
+
+        Args:
+            service: The refinement service fixture.
+        """
         service.endpoint = None
         service.api_key = "test-key"
         service.deployment_name = "test-deployment"
@@ -30,7 +38,11 @@ class TestPromptRefinementService:
         assert not service.is_configured()
 
     def test_is_configured_false_when_missing_api_key(self, service):
-        """Test is_configured returns False when API key is missing."""
+        """Test is_configured returns False when API key is missing.
+
+        Args:
+            service: The refinement service fixture.
+        """
         service.endpoint = "https://test.openai.azure.com"
         service.api_key = None
         service.deployment_name = "test-deployment"
@@ -38,7 +50,11 @@ class TestPromptRefinementService:
         assert not service.is_configured()
 
     def test_is_configured_false_when_missing_deployment(self, service):
-        """Test is_configured returns False when deployment name is missing."""
+        """Test is_configured returns False when deployment name is missing.
+
+        Args:
+            service: The refinement service fixture.
+        """
         service.endpoint = "https://test.openai.azure.com"
         service.api_key = "test-key"
         service.deployment_name = None
@@ -46,7 +62,11 @@ class TestPromptRefinementService:
         assert not service.is_configured()
 
     def test_is_configured_true_when_all_present(self, service):
-        """Test is_configured returns True when all config is present."""
+        """Test is_configured returns True when all config is present.
+
+        Args:
+            service: The refinement service fixture.
+        """
         service.endpoint = "https://test.openai.azure.com"
         service.api_key = "test-key"
         service.deployment_name = "test-deployment"
@@ -55,7 +75,11 @@ class TestPromptRefinementService:
 
     @pytest.mark.asyncio
     async def test_get_refinement_response_not_configured(self, service):
-        """Test response when service is not configured."""
+        """Test response when service is not configured.
+
+        Args:
+            service: The refinement service fixture.
+        """
         service.endpoint = None
 
         response, refined = await service.get_refinement_response([], "test message")
@@ -65,7 +89,11 @@ class TestPromptRefinementService:
 
     @pytest.mark.asyncio
     async def test_get_refinement_response_success(self, service):
-        """Test successful refinement response."""
+        """Test successful refinement response.
+
+        Args:
+            service: The refinement service fixture.
+        """
         service.endpoint = "https://test.openai.azure.com"
         service.api_key = "test-key"
         service.deployment_name = "test-deployment"
@@ -96,7 +124,11 @@ class TestPromptRefinementService:
 
     @pytest.mark.asyncio
     async def test_get_refinement_response_with_ready_marker(self, service):
-        """Test response when refined prompt is ready."""
+        """Test response when refined prompt is ready.
+
+        Args:
+            service: The refinement service fixture.
+        """
         service.endpoint = "https://test.openai.azure.com"
         service.api_key = "test-key"
         service.deployment_name = "test-deployment"
@@ -132,7 +164,11 @@ class TestPromptRefinementService:
 
     @pytest.mark.asyncio
     async def test_get_refinement_response_handles_error(self, service):
-        """Test error handling in refinement response."""
+        """Test error handling in refinement response.
+
+        Args:
+            service: The refinement service fixture.
+        """
         service.endpoint = "https://test.openai.azure.com"
         service.api_key = "test-key"
         service.deployment_name = "test-deployment"
@@ -154,7 +190,11 @@ class TestPromptRefinementService:
 
     @pytest.mark.asyncio
     async def test_generate_initial_questions(self, service):
-        """Test generating initial questions."""
+        """Test generating initial questions.
+
+        Args:
+            service: The refinement service fixture.
+        """
         service.endpoint = "https://test.openai.azure.com"
         service.api_key = "test-key"
         service.deployment_name = "test-deployment"
@@ -182,7 +222,11 @@ class TestPromptRefinementService:
 
     @pytest.mark.asyncio
     async def test_finalize_prompt_with_ai(self, service):
-        """Test finalizing prompt with AI extraction."""
+        """Test finalizing prompt with AI extraction.
+
+        Args:
+            service: The refinement service fixture.
+        """
         service.endpoint = "https://test.openai.azure.com"
         service.api_key = "test-key"
         service.deployment_name = "test-deployment"
@@ -202,7 +246,11 @@ class TestPromptRefinementService:
 
     @pytest.mark.asyncio
     async def test_finalize_prompt_fallback(self, service):
-        """Test finalizing prompt falls back to user messages."""
+        """Test finalizing prompt falls back to user messages.
+
+        Args:
+            service: The refinement service fixture.
+        """
         service.endpoint = None  # Not configured
 
         result = await service.finalize_prompt(
@@ -217,7 +265,11 @@ class TestPromptRefinementService:
         assert "React" in result
 
     def test_get_system_prompt(self, service):
-        """Test getting system prompt from config."""
+        """Test getting system prompt from config.
+
+        Args:
+            service: The refinement service fixture.
+        """
         custom_prompt = "You are a custom assistant."
 
         with patch(
@@ -233,22 +285,34 @@ class TestSingletonRefinementService:
     """Tests for singleton refinement service access."""
 
     def setup_method(self):
-        """Reset the singleton before each test."""
+        """Reset the singleton before each test.
+
+        Ensures each test starts with a fresh singleton state.
+        """
         reset_refinement_service()
 
     def teardown_method(self):
-        """Reset the singleton after each test."""
+        """Reset the singleton after each test.
+
+        Cleans up singleton state to avoid test pollution.
+        """
         reset_refinement_service()
 
     def test_get_refinement_service_returns_same_instance(self):
-        """Test that get_refinement_service returns the same instance."""
+        """Test that get_refinement_service returns the same instance.
+
+        Verifies the singleton pattern is correctly implemented.
+        """
         service1 = get_refinement_service()
         service2 = get_refinement_service()
 
         assert service1 is service2
 
     def test_reset_refinement_service(self):
-        """Test that reset clears the singleton."""
+        """Test that reset clears the singleton.
+
+        Verifies reset creates a new instance on next access.
+        """
         service1 = get_refinement_service()
         reset_refinement_service()
         service2 = get_refinement_service()
@@ -261,7 +325,11 @@ class TestRefinementResponseEdgeCases:
 
     @pytest.fixture
     def configured_service(self):
-        """Create a configured refinement service."""
+        """Create a configured refinement service.
+
+        Returns:
+            PromptRefinementService: A fully configured service instance.
+        """
         service = PromptRefinementService()
         service.endpoint = "https://test.openai.azure.com"
         service.api_key = "test-key"
@@ -270,7 +338,11 @@ class TestRefinementResponseEdgeCases:
 
     @pytest.mark.asyncio
     async def test_empty_response_with_finish_reason(self, configured_service):
-        """Test handling of empty response with finish reason (line 155-157)."""
+        """Test handling of empty response with finish reason.
+
+        Args:
+            configured_service: The configured refinement service fixture.
+        """
         mock_client = MagicMock()
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
@@ -295,7 +367,11 @@ class TestRefinementResponseEdgeCases:
 
     @pytest.mark.asyncio
     async def test_empty_response_with_usage_info(self, configured_service):
-        """Test handling of empty response with usage info (line 158-159)."""
+        """Test handling of empty response with usage info.
+
+        Args:
+            configured_service: The configured refinement service fixture.
+        """
         mock_client = MagicMock()
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
@@ -322,7 +398,11 @@ class TestRefinementResponseEdgeCases:
 
     @pytest.mark.asyncio
     async def test_response_with_refusal(self, configured_service):
-        """Test handling of response with refusal message (line 146-147)."""
+        """Test handling of response with refusal message.
+
+        Args:
+            configured_service: The configured refinement service fixture.
+        """
         mock_client = MagicMock()
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
@@ -345,7 +425,11 @@ class TestRefinementResponseEdgeCases:
 
     @pytest.mark.asyncio
     async def test_response_with_no_choices(self, configured_service):
-        """Test handling of response with no choices (line 148-149)."""
+        """Test handling of response with no choices.
+
+        Args:
+            configured_service: The configured refinement service fixture.
+        """
         mock_client = MagicMock()
         mock_response = MagicMock()
         mock_response.choices = []
@@ -370,7 +454,11 @@ class TestExtractRefinedPrompt:
 
     @pytest.fixture
     def configured_service(self):
-        """Create a configured refinement service."""
+        """Create a configured refinement service.
+
+        Returns:
+            PromptRefinementService: A fully configured service instance.
+        """
         service = PromptRefinementService()
         service.endpoint = "https://test.openai.azure.com"
         service.api_key = "test-key"
@@ -379,7 +467,10 @@ class TestExtractRefinedPrompt:
 
     @pytest.mark.asyncio
     async def test_extract_not_configured(self):
-        """Test extraction when service is not configured (line 194-195)."""
+        """Test extraction when service is not configured.
+
+        Verifies that extraction returns None when service lacks configuration.
+        """
         service = PromptRefinementService()
         service.endpoint = None
 
@@ -391,7 +482,11 @@ class TestExtractRefinedPrompt:
 
     @pytest.mark.asyncio
     async def test_extract_success(self, configured_service):
-        """Test successful prompt extraction (lines 197-295)."""
+        """Test successful prompt extraction.
+
+        Args:
+            configured_service: The configured refinement service fixture.
+        """
         mock_client = MagicMock()
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
@@ -415,7 +510,11 @@ class TestExtractRefinedPrompt:
 
     @pytest.mark.asyncio
     async def test_extract_empty_response(self, configured_service):
-        """Test extraction with empty response (line 287-289)."""
+        """Test extraction with empty response.
+
+        Args:
+            configured_service: The configured refinement service fixture.
+        """
         mock_client = MagicMock()
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
@@ -436,7 +535,11 @@ class TestExtractRefinedPrompt:
 
     @pytest.mark.asyncio
     async def test_extract_handles_exception(self, configured_service):
-        """Test extraction handles exceptions (line 293-295)."""
+        """Test extraction handles exceptions.
+
+        Args:
+            configured_service: The configured refinement service fixture.
+        """
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = Exception("API Error")
 
@@ -458,7 +561,11 @@ class TestFinalizePromptFallback:
 
     @pytest.fixture
     def configured_service(self):
-        """Create a configured refinement service."""
+        """Create a configured refinement service.
+
+        Returns:
+            PromptRefinementService: A fully configured service instance.
+        """
         service = PromptRefinementService()
         service.endpoint = "https://test.openai.azure.com"
         service.api_key = "test-key"
@@ -467,7 +574,11 @@ class TestFinalizePromptFallback:
 
     @pytest.mark.asyncio
     async def test_fallback_when_extraction_fails(self, configured_service):
-        """Test fallback to user messages when extraction fails (lines 330-335)."""
+        """Test fallback to user messages when extraction fails.
+
+        Args:
+            configured_service: The configured refinement service fixture.
+        """
         with patch.object(
             configured_service, "_extract_refined_prompt", return_value=None
         ):
@@ -490,7 +601,10 @@ class TestClientLazyLoading:
     """Tests for client lazy loading behavior."""
 
     def test_client_not_created_when_not_configured(self):
-        """Test that client is not created when not configured (line 72)."""
+        """Test that client is not created when not configured.
+
+        Verifies that accessing client property returns None when unconfigured.
+        """
         service = PromptRefinementService()
         service.endpoint = None
         service.api_key = None
@@ -501,7 +615,10 @@ class TestClientLazyLoading:
         assert client is None
 
     def test_client_created_when_configured(self):
-        """Test that client is created when configured."""
+        """Test that client is created when configured.
+
+        Verifies that accessing client property creates AzureOpenAI client.
+        """
         service = PromptRefinementService()
         service.endpoint = "https://test.openai.azure.com"
         service.api_key = "test-key"
@@ -522,7 +639,11 @@ class TestStreamRefinementResponse:
 
     @pytest.fixture
     def configured_service(self):
-        """Create a configured refinement service."""
+        """Create a configured refinement service.
+
+        Returns:
+            PromptRefinementService: A fully configured service instance.
+        """
         service = PromptRefinementService()
         service.endpoint = "https://test.openai.azure.com"
         service.api_key = "test-key"
@@ -531,7 +652,10 @@ class TestStreamRefinementResponse:
 
     @pytest.mark.asyncio
     async def test_stream_not_configured(self):
-        """Test streaming response when service is not configured."""
+        """Test streaming response when service is not configured.
+
+        Verifies that streaming yields error message when unconfigured.
+        """
         service = PromptRefinementService()
         service.endpoint = None
 
@@ -547,7 +671,11 @@ class TestStreamRefinementResponse:
 
     @pytest.mark.asyncio
     async def test_stream_success(self, configured_service):
-        """Test successful streaming response."""
+        """Test successful streaming response.
+
+        Args:
+            configured_service: The configured refinement service fixture.
+        """
         mock_client = MagicMock()
 
         # Create mock stream chunks
@@ -578,7 +706,11 @@ class TestStreamRefinementResponse:
 
     @pytest.mark.asyncio
     async def test_stream_empty_response(self, configured_service):
-        """Test streaming with empty response."""
+        """Test streaming with empty response.
+
+        Args:
+            configured_service: The configured refinement service fixture.
+        """
         mock_client = MagicMock()
 
         # Empty stream
@@ -603,7 +735,11 @@ class TestStreamRefinementResponse:
 
     @pytest.mark.asyncio
     async def test_stream_with_refined_prompt_ready(self, configured_service):
-        """Test streaming when refined prompt is ready."""
+        """Test streaming when refined prompt is ready.
+
+        Args:
+            configured_service: The configured refinement service fixture.
+        """
         mock_client = MagicMock()
 
         # Create mock stream chunks with "refined prompt ready" marker
@@ -648,7 +784,11 @@ class TestStreamRefinementResponse:
 
     @pytest.mark.asyncio
     async def test_stream_handles_exception(self, configured_service):
-        """Test streaming handles exceptions."""
+        """Test streaming handles exceptions.
+
+        Args:
+            configured_service: The configured refinement service fixture.
+        """
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = Exception("API Error")
 
@@ -675,7 +815,11 @@ class TestStreamExtractRefinedPrompt:
 
     @pytest.fixture
     def configured_service(self):
-        """Create a configured refinement service."""
+        """Create a configured refinement service.
+
+        Returns:
+            PromptRefinementService: A fully configured service instance.
+        """
         service = PromptRefinementService()
         service.endpoint = "https://test.openai.azure.com"
         service.api_key = "test-key"
@@ -684,7 +828,10 @@ class TestStreamExtractRefinedPrompt:
 
     @pytest.mark.asyncio
     async def test_stream_extract_not_configured(self):
-        """Test streaming extraction when not configured."""
+        """Test streaming extraction when not configured.
+
+        Verifies that streaming extraction yields nothing when unconfigured.
+        """
         service = PromptRefinementService()
         service.endpoint = None
 
@@ -696,7 +843,11 @@ class TestStreamExtractRefinedPrompt:
 
     @pytest.mark.asyncio
     async def test_stream_extract_success(self, configured_service):
-        """Test successful streaming extraction."""
+        """Test successful streaming extraction.
+
+        Args:
+            configured_service: The configured refinement service fixture.
+        """
         mock_client = MagicMock()
 
         # Create mock stream chunks
@@ -723,7 +874,11 @@ class TestStreamExtractRefinedPrompt:
 
     @pytest.mark.asyncio
     async def test_stream_extract_empty_response(self, configured_service):
-        """Test streaming extraction with empty response."""
+        """Test streaming extraction with empty response.
+
+        Args:
+            configured_service: The configured refinement service fixture.
+        """
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = iter([])
 
@@ -741,7 +896,11 @@ class TestStreamExtractRefinedPrompt:
 
     @pytest.mark.asyncio
     async def test_stream_extract_handles_exception(self, configured_service):
-        """Test streaming extraction handles exceptions."""
+        """Test streaming extraction handles exceptions.
+
+        Args:
+            configured_service: The configured refinement service fixture.
+        """
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = Exception("API Error")
 

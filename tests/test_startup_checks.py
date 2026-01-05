@@ -20,7 +20,11 @@ class TestCheckStatus:
     """Tests for CheckStatus enum."""
     
     def test_status_values(self):
-        """Test that all expected status values exist."""
+        """Test that all expected status values exist.
+
+        Verifies that the CheckStatus enum contains PASS, WARN, FAIL,
+        and SKIP values with their expected string representations.
+        """
         assert CheckStatus.PASS.value == "PASS"
         assert CheckStatus.WARN.value == "WARN"
         assert CheckStatus.FAIL.value == "FAIL"
@@ -31,7 +35,11 @@ class TestCheckResult:
     """Tests for CheckResult dataclass."""
     
     def test_create_result_with_details(self):
-        """Test creating a result with details."""
+        """Test creating a result with details.
+
+        Verifies that a CheckResult can be created with all fields
+        including optional details, and that all values are stored correctly.
+        """
         result = CheckResult(
             name="Test Check",
             status=CheckStatus.PASS,
@@ -44,7 +52,11 @@ class TestCheckResult:
         assert result.details == "Extra info"
     
     def test_create_result_without_details(self):
-        """Test creating a result without details."""
+        """Test creating a result without details.
+
+        Verifies that a CheckResult can be created without the optional
+        details field and that it defaults to None.
+        """
         result = CheckResult(
             name="Test Check",
             status=CheckStatus.FAIL,
@@ -58,15 +70,31 @@ class TestStartupChecker:
     
     @pytest.fixture
     def checker(self):
-        """Create a fresh startup checker."""
+        """Create a fresh startup checker.
+
+        Returns:
+            StartupChecker: A new StartupChecker instance for testing.
+        """
         return StartupChecker()
     
     def test_init(self, checker):
-        """Test initialization."""
+        """Test initialization.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that a new StartupChecker has an empty results list.
+        """
         assert checker.results == []
     
     def test_add_result(self, checker):
-        """Test adding a result."""
+        """Test adding a result.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that _add_result correctly creates and stores a CheckResult.
+        """
         result = checker._add_result(
             name="Test",
             status=CheckStatus.PASS,
@@ -80,21 +108,42 @@ class TestStartupChecker:
     # Discord token checks
     @patch('src.utils.startup_checks.DISCORD_BOT_TOKEN', None)
     def test_check_discord_token_missing(self, checker):
-        """Test Discord token check when missing."""
+        """Test Discord token check when missing.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_discord_token returns FAIL status when
+        the DISCORD_BOT_TOKEN environment variable is not set.
+        """
         result = checker.check_discord_token()
         assert result.status == CheckStatus.FAIL
         assert "not set" in result.message
     
     @patch('src.utils.startup_checks.DISCORD_BOT_TOKEN', 'short')
     def test_check_discord_token_short(self, checker):
-        """Test Discord token check when too short."""
+        """Test Discord token check when too short.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_discord_token returns WARN status when
+        the token appears to be shorter than expected.
+        """
         result = checker.check_discord_token()
         assert result.status == CheckStatus.WARN
         assert "short" in result.message.lower()
     
     @patch('src.utils.startup_checks.DISCORD_BOT_TOKEN', 'a' * 60)
     def test_check_discord_token_valid(self, checker):
-        """Test Discord token check when valid."""
+        """Test Discord token check when valid.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_discord_token returns PASS status when
+        a valid-length token is configured.
+        """
         result = checker.check_discord_token()
         assert result.status == CheckStatus.PASS
         assert "configured" in result.message
@@ -102,7 +151,14 @@ class TestStartupChecker:
     # GitHub integration checks
     @patch('src.utils.startup_checks.GITHUB_ENABLED', False)
     def test_check_github_disabled(self, checker):
-        """Test GitHub check when disabled."""
+        """Test GitHub check when disabled.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_github_integration returns SKIP status
+        when GitHub integration is disabled in configuration.
+        """
         result = checker.check_github_integration()
         assert result.status == CheckStatus.SKIP
         assert "disabled" in result.message
@@ -111,7 +167,14 @@ class TestStartupChecker:
     @patch('src.utils.startup_checks.GITHUB_TOKEN', None)
     @patch('src.utils.startup_checks.GITHUB_USERNAME', 'test')
     def test_check_github_missing_token(self, checker):
-        """Test GitHub check when token is missing."""
+        """Test GitHub check when token is missing.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_github_integration returns FAIL status
+        when GITHUB_TOKEN is not set but GitHub is enabled.
+        """
         result = checker.check_github_integration()
         assert result.status == CheckStatus.FAIL
         assert "GITHUB_TOKEN" in result.message
@@ -120,7 +183,14 @@ class TestStartupChecker:
     @patch('src.utils.startup_checks.GITHUB_TOKEN', 'test')
     @patch('src.utils.startup_checks.GITHUB_USERNAME', None)
     def test_check_github_missing_username(self, checker):
-        """Test GitHub check when username is missing."""
+        """Test GitHub check when username is missing.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_github_integration returns FAIL status
+        when GITHUB_USERNAME is not set but GitHub is enabled.
+        """
         result = checker.check_github_integration()
         assert result.status == CheckStatus.FAIL
         assert "GITHUB_USERNAME" in result.message
@@ -129,7 +199,14 @@ class TestStartupChecker:
     @patch('src.utils.startup_checks.GITHUB_TOKEN', 'test-token')
     @patch('src.utils.startup_checks.GITHUB_USERNAME', 'testuser')
     def test_check_github_success(self, checker):
-        """Test GitHub check when successful."""
+        """Test GitHub check when successful.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_github_integration returns PASS status
+        when GitHub API authentication succeeds and username matches.
+        """
         with patch('github.Github') as mock_gh:
             mock_user = MagicMock()
             mock_user.login = 'testuser'
@@ -144,7 +221,14 @@ class TestStartupChecker:
     @patch('src.utils.startup_checks.GITHUB_TOKEN', 'test-token')
     @patch('src.utils.startup_checks.GITHUB_USERNAME', 'testuser')
     def test_check_github_username_mismatch(self, checker):
-        """Test GitHub check when username doesn't match."""
+        """Test GitHub check when username doesn't match.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_github_integration returns WARN status
+        when the authenticated user differs from GITHUB_USERNAME.
+        """
         with patch('github.Github') as mock_gh:
             mock_user = MagicMock()
             mock_user.login = 'differentuser'
@@ -159,7 +243,14 @@ class TestStartupChecker:
     @patch('src.utils.startup_checks.GITHUB_TOKEN', 'test-token')
     @patch('src.utils.startup_checks.GITHUB_USERNAME', 'testuser')
     def test_check_github_api_error(self, checker):
-        """Test GitHub check when API fails."""
+        """Test GitHub check when API fails.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_github_integration returns FAIL status
+        when the GitHub API returns an error (e.g., bad credentials).
+        """
         from github import GithubException
         
         with patch('github.Github') as mock_gh:
@@ -178,7 +269,14 @@ class TestStartupChecker:
     @patch('src.utils.startup_checks.GITHUB_TOKEN', 'test-token')
     @patch('src.utils.startup_checks.GITHUB_USERNAME', 'testuser')
     def test_check_github_generic_exception(self, checker):
-        """Test GitHub check when a generic exception occurs."""
+        """Test GitHub check when a generic exception occurs.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_github_integration returns FAIL status
+        and includes the exception type when an unexpected error occurs.
+        """
         with patch('github.Github') as mock_gh:
             mock_gh.return_value.get_user.side_effect = ConnectionError("Network error")
             
@@ -192,7 +290,14 @@ class TestStartupChecker:
     @patch('src.utils.startup_checks.AZURE_OPENAI_API_KEY', None)
     @patch('src.utils.startup_checks.AZURE_OPENAI_DEPLOYMENT_NAME', None)
     def test_check_azure_not_configured(self, checker):
-        """Test Azure OpenAI check when not configured."""
+        """Test Azure OpenAI check when not configured.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_azure_openai returns SKIP status when
+        no Azure OpenAI configuration values are set.
+        """
         result = checker.check_azure_openai()
         assert result.status == CheckStatus.SKIP
         assert "not configured" in result.message
@@ -201,7 +306,14 @@ class TestStartupChecker:
     @patch('src.utils.startup_checks.AZURE_OPENAI_API_KEY', None)
     @patch('src.utils.startup_checks.AZURE_OPENAI_DEPLOYMENT_NAME', 'gpt-4')
     def test_check_azure_missing_api_key(self, checker):
-        """Test Azure OpenAI check when API key is missing."""
+        """Test Azure OpenAI check when API key is missing.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_azure_openai returns WARN status when
+        endpoint is configured but API key is missing.
+        """
         result = checker.check_azure_openai()
         assert result.status == CheckStatus.WARN
         assert "AZURE_OPENAI_API_KEY" in result.message
@@ -210,7 +322,14 @@ class TestStartupChecker:
     @patch('src.utils.startup_checks.AZURE_OPENAI_API_KEY', 'test-key')
     @patch('src.utils.startup_checks.AZURE_OPENAI_DEPLOYMENT_NAME', 'gpt-4')
     def test_check_azure_success(self, checker):
-        """Test Azure OpenAI check when successful."""
+        """Test Azure OpenAI check when successful.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_azure_openai returns PASS status when
+        the Azure OpenAI API connection test succeeds.
+        """
         with patch('openai.AzureOpenAI') as mock_client:
             mock_response = MagicMock()
             mock_client.return_value.chat.completions.create.return_value = mock_response
@@ -224,7 +343,14 @@ class TestStartupChecker:
     @patch('src.utils.startup_checks.AZURE_OPENAI_API_KEY', 'test-key')
     @patch('src.utils.startup_checks.AZURE_OPENAI_DEPLOYMENT_NAME', 'gpt-4')
     def test_check_azure_connection_error(self, checker):
-        """Test Azure OpenAI check when connection fails."""
+        """Test Azure OpenAI check when connection fails.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_azure_openai returns WARN status when
+        the Azure OpenAI API connection fails with a network error.
+        """
         with patch('openai.AzureOpenAI') as mock_client:
             mock_client.return_value.chat.completions.create.side_effect = ConnectionError("timeout")
             
@@ -238,7 +364,15 @@ class TestStartupChecker:
     @patch('src.utils.startup_checks.BASE_DIR', Path('/tmp/test_base'))
     @patch('src.utils.startup_checks.GITHUB_ENABLED', False)
     def test_check_folder_access_success(self, checker, tmp_path):
-        """Test folder access check when successful."""
+        """Test folder access check when successful.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+            tmp_path: Pytest fixture providing a temporary directory.
+
+        Verifies that check_folder_access returns PASS status when
+        all required directories are accessible and writable.
+        """
         projects_dir = tmp_path / "projects"
         base_dir = tmp_path
         config_path = base_dir / "config.yaml"
@@ -252,7 +386,15 @@ class TestStartupChecker:
     
     @patch('src.utils.startup_checks.GITHUB_ENABLED', False)
     def test_check_folder_access_missing_config(self, checker, tmp_path):
-        """Test folder access check when config.yaml is missing."""
+        """Test folder access check when config.yaml is missing.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+            tmp_path: Pytest fixture providing a temporary directory.
+
+        Verifies that check_folder_access returns WARN or FAIL status
+        when the config.yaml file is not found in the base directory.
+        """
         projects_dir = tmp_path / "projects"
         base_dir = tmp_path / "nonexistent"
         
@@ -265,7 +407,15 @@ class TestStartupChecker:
     
     @patch('src.utils.startup_checks.GITHUB_ENABLED', True)
     def test_check_folder_access_missing_gitignore(self, checker, tmp_path):
-        """Test folder access check when .gitignore is missing for GitHub."""
+        """Test folder access check when .gitignore is missing for GitHub.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+            tmp_path: Pytest fixture providing a temporary directory.
+
+        Verifies that check_folder_access returns WARN status when
+        GitHub is enabled but .gitignore file is missing.
+        """
         projects_dir = tmp_path / "projects"
         base_dir = tmp_path
         config_path = base_dir / "config.yaml"
@@ -280,7 +430,15 @@ class TestStartupChecker:
     
     @patch('src.utils.startup_checks.GITHUB_ENABLED', False)
     def test_check_folder_access_permission_error(self, checker, tmp_path):
-        """Test folder access check with permission error during write."""
+        """Test folder access check with permission error during write.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+            tmp_path: Pytest fixture providing a temporary directory.
+
+        Verifies that check_folder_access returns WARN or FAIL status
+        when a permission error occurs while testing write access.
+        """
         projects_dir = tmp_path / "projects"
         base_dir = tmp_path
         config_path = base_dir / "config.yaml"
@@ -295,7 +453,14 @@ class TestStartupChecker:
     
     # Copilot CLI checks
     def test_check_copilot_cli_success(self, checker):
-        """Test Copilot CLI check when available."""
+        """Test Copilot CLI check when available.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_copilot_cli returns PASS status when
+        the Copilot CLI command executes successfully.
+        """
         with patch('subprocess.run') as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0,
@@ -308,7 +473,14 @@ class TestStartupChecker:
             assert "Available" in result.message
     
     def test_check_copilot_cli_not_found(self, checker):
-        """Test Copilot CLI check when not found."""
+        """Test Copilot CLI check when not found.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_copilot_cli returns FAIL status when
+        the Copilot CLI executable is not found on the system.
+        """
         with patch('subprocess.run', side_effect=FileNotFoundError()):
             result = checker.check_copilot_cli()
             
@@ -316,7 +488,14 @@ class TestStartupChecker:
             assert "not found" in result.message.lower()
     
     def test_check_copilot_cli_timeout(self, checker):
-        """Test Copilot CLI check when timeout occurs."""
+        """Test Copilot CLI check when timeout occurs.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_copilot_cli returns WARN status when
+        the command times out during execution.
+        """
         with patch('subprocess.run', side_effect=subprocess.TimeoutExpired("copilot", 10)):
             result = checker.check_copilot_cli()
             
@@ -324,7 +503,14 @@ class TestStartupChecker:
             assert "Timeout" in result.message
     
     def test_check_copilot_cli_error_return_code(self, checker):
-        """Test Copilot CLI check when command returns error."""
+        """Test Copilot CLI check when command returns error.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_copilot_cli returns FAIL status when
+        the command exits with a non-zero return code.
+        """
         with patch('subprocess.run') as mock_run:
             mock_run.return_value = MagicMock(returncode=1, stdout="")
             
@@ -334,7 +520,14 @@ class TestStartupChecker:
             assert "not installed" in result.message.lower()
     
     def test_check_copilot_cli_generic_exception(self, checker):
-        """Test Copilot CLI check with generic exception."""
+        """Test Copilot CLI check with generic exception.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_copilot_cli returns FAIL status and
+        includes the exception type when an unexpected error occurs.
+        """
         with patch('subprocess.run', side_effect=RuntimeError("Unknown error")):
             result = checker.check_copilot_cli()
             
@@ -343,7 +536,14 @@ class TestStartupChecker:
     
     # Git checks
     def test_check_git_success(self, checker):
-        """Test Git check when available."""
+        """Test Git check when available.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_git returns PASS status when the git
+        command executes successfully and returns version info.
+        """
         with patch('subprocess.run') as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0,
@@ -356,7 +556,14 @@ class TestStartupChecker:
             assert "git version" in result.message
     
     def test_check_git_not_found(self, checker):
-        """Test Git check when not found."""
+        """Test Git check when not found.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_git returns FAIL status when the git
+        executable is not found on the system.
+        """
         with patch('subprocess.run', side_effect=FileNotFoundError()):
             result = checker.check_git()
             
@@ -364,7 +571,14 @@ class TestStartupChecker:
             assert "not found" in result.message.lower()
     
     def test_check_git_error_return_code(self, checker):
-        """Test Git check when command returns error."""
+        """Test Git check when command returns error.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_git returns FAIL status when the git
+        command exits with a non-zero return code.
+        """
         with patch('subprocess.run') as mock_run:
             mock_run.return_value = MagicMock(returncode=1, stdout="")
             
@@ -373,7 +587,14 @@ class TestStartupChecker:
             assert result.status == CheckStatus.FAIL
     
     def test_check_git_generic_exception(self, checker):
-        """Test Git check with generic exception."""
+        """Test Git check with generic exception.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that check_git returns FAIL status and includes the
+        exception type when an unexpected error occurs.
+        """
         with patch('subprocess.run', side_effect=RuntimeError("Unknown error")):
             result = checker.check_git()
             
@@ -387,7 +608,15 @@ class TestStartupChecker:
     @patch('src.utils.startup_checks.AZURE_OPENAI_API_KEY', None)
     @patch('src.utils.startup_checks.AZURE_OPENAI_DEPLOYMENT_NAME', None)
     def test_run_all_checks(self, checker, tmp_path):
-        """Test running all checks."""
+        """Test running all checks.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+            tmp_path: Pytest fixture providing a temporary directory.
+
+        Verifies that run_all_checks executes all 6 startup checks
+        and returns a list of CheckResult objects.
+        """
         projects_dir = tmp_path / "projects"
         base_dir = tmp_path
         config_path = base_dir / "config.yaml"
@@ -404,7 +633,14 @@ class TestStartupChecker:
         assert all(isinstance(r, CheckResult) for r in results)
     
     def test_run_all_checks_with_exception(self, checker):
-        """Test run_all_checks handles exceptions in checks."""
+        """Test run_all_checks handles exceptions in checks.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that run_all_checks continues executing remaining checks
+        even when one check raises an exception, recording the failure.
+        """
         # The first check (discord_token) will raise, the rest will proceed normally
         original_check_discord = checker.check_discord_token
         
@@ -438,12 +674,24 @@ class TestStartupChecker:
     
     # Log result
     def test_log_result_pass(self, checker):
-        """Test logging a PASS result."""
+        """Test logging a PASS result.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that _log_result handles PASS status without raising.
+        """
         result = CheckResult(name="Test", status=CheckStatus.PASS, message="OK")
         checker._log_result(result)  # Should not raise
     
     def test_log_result_warn_with_details(self, checker):
-        """Test logging a WARN result with details."""
+        """Test logging a WARN result with details.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that _log_result handles WARN status with details.
+        """
         result = CheckResult(
             name="Test",
             status=CheckStatus.WARN,
@@ -453,7 +701,13 @@ class TestStartupChecker:
         checker._log_result(result)  # Should not raise
     
     def test_log_result_fail_with_details(self, checker):
-        """Test logging a FAIL result with details."""
+        """Test logging a FAIL result with details.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that _log_result handles FAIL status with details.
+        """
         result = CheckResult(
             name="Test",
             status=CheckStatus.FAIL,
@@ -463,7 +717,13 @@ class TestStartupChecker:
         checker._log_result(result)  # Should not raise
     
     def test_log_result_skip_with_details(self, checker):
-        """Test logging a SKIP result with details."""
+        """Test logging a SKIP result with details.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that _log_result handles SKIP status with details.
+        """
         result = CheckResult(
             name="Test",
             status=CheckStatus.SKIP,
@@ -474,7 +734,14 @@ class TestStartupChecker:
     
     # Has critical failures
     def test_has_critical_failures_false(self, checker):
-        """Test has_critical_failures returns False when no critical failures."""
+        """Test has_critical_failures returns False when no critical failures.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that has_critical_failures returns False when all
+        critical checks (Discord, Folder, Copilot) pass.
+        """
         checker.results = [
             CheckResult(name="Discord Bot Token", status=CheckStatus.PASS, message="OK"),
             CheckResult(name="Folder Access", status=CheckStatus.PASS, message="OK"),
@@ -484,7 +751,14 @@ class TestStartupChecker:
         assert not checker.has_critical_failures()
     
     def test_has_critical_failures_true_discord(self, checker):
-        """Test has_critical_failures returns True when Discord token fails."""
+        """Test has_critical_failures returns True when Discord token fails.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that has_critical_failures returns True when the
+        Discord Bot Token check has FAIL status.
+        """
         checker.results = [
             CheckResult(name="Discord Bot Token", status=CheckStatus.FAIL, message="Missing"),
         ]
@@ -492,7 +766,14 @@ class TestStartupChecker:
         assert checker.has_critical_failures()
     
     def test_has_critical_failures_true_folder(self, checker):
-        """Test has_critical_failures returns True when folder access fails."""
+        """Test has_critical_failures returns True when folder access fails.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that has_critical_failures returns True when the
+        Folder Access check has FAIL status.
+        """
         checker.results = [
             CheckResult(name="Folder Access", status=CheckStatus.FAIL, message="No access"),
         ]
@@ -500,7 +781,14 @@ class TestStartupChecker:
         assert checker.has_critical_failures()
     
     def test_has_critical_failures_true_copilot(self, checker):
-        """Test has_critical_failures returns True when Copilot CLI fails."""
+        """Test has_critical_failures returns True when Copilot CLI fails.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that has_critical_failures returns True when the
+        Copilot CLI check has FAIL status.
+        """
         checker.results = [
             CheckResult(name="Copilot CLI", status=CheckStatus.FAIL, message="Not found"),
         ]
@@ -508,7 +796,14 @@ class TestStartupChecker:
         assert checker.has_critical_failures()
     
     def test_has_critical_failures_false_non_critical(self, checker):
-        """Test has_critical_failures returns False for non-critical failures."""
+        """Test has_critical_failures returns False for non-critical failures.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that has_critical_failures returns False when only
+        non-critical checks (GitHub, Azure) have FAIL status.
+        """
         checker.results = [
             CheckResult(name="GitHub Integration", status=CheckStatus.FAIL, message="Bad token"),
             CheckResult(name="Azure OpenAI", status=CheckStatus.FAIL, message="Connection error"),
@@ -518,7 +813,14 @@ class TestStartupChecker:
     
     # Get failures/warnings
     def test_get_failures(self, checker):
-        """Test get_failures returns only failed results."""
+        """Test get_failures returns only failed results.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that get_failures returns a list containing only
+        CheckResult objects with FAIL status.
+        """
         checker.results = [
             CheckResult(name="Test1", status=CheckStatus.PASS, message="OK"),
             CheckResult(name="Test2", status=CheckStatus.FAIL, message="Failed"),
@@ -530,7 +832,14 @@ class TestStartupChecker:
         assert failures[0].name == "Test2"
     
     def test_get_warnings(self, checker):
-        """Test get_warnings returns only warning results."""
+        """Test get_warnings returns only warning results.
+
+        Args:
+            checker: The StartupChecker fixture instance.
+
+        Verifies that get_warnings returns a list containing only
+        CheckResult objects with WARN status.
+        """
         checker.results = [
             CheckResult(name="Test1", status=CheckStatus.PASS, message="OK"),
             CheckResult(name="Test2", status=CheckStatus.FAIL, message="Failed"),
@@ -551,7 +860,14 @@ class TestRunStartupChecks:
     @patch('src.utils.startup_checks.AZURE_OPENAI_API_KEY', None)
     @patch('src.utils.startup_checks.AZURE_OPENAI_DEPLOYMENT_NAME', None)
     def test_run_startup_checks_success(self, tmp_path):
-        """Test run_startup_checks when all critical checks pass."""
+        """Test run_startup_checks when all critical checks pass.
+
+        Args:
+            tmp_path: Pytest fixture providing a temporary directory.
+
+        Verifies that run_startup_checks returns a StartupChecker
+        instance with no critical failures when all checks pass.
+        """
         projects_dir = tmp_path / "projects"
         base_dir = tmp_path
         config_path = base_dir / "config.yaml"
@@ -569,7 +885,12 @@ class TestRunStartupChecks:
     
     @patch('src.utils.startup_checks.DISCORD_BOT_TOKEN', None)
     def test_run_startup_checks_exit_on_critical(self):
-        """Test run_startup_checks raises SystemExit on critical failure."""
+        """Test run_startup_checks raises SystemExit on critical failure.
+
+        Verifies that run_startup_checks raises SystemExit with an
+        informative message when a critical check fails and
+        exit_on_critical is True.
+        """
         with patch('src.utils.startup_checks.StartupChecker.run_all_checks'):
             with patch('src.utils.startup_checks.StartupChecker.has_critical_failures', return_value=True):
                 with patch('src.utils.startup_checks.StartupChecker.get_failures') as mock_failures:
@@ -584,7 +905,12 @@ class TestRunStartupChecks:
     
     @patch('src.utils.startup_checks.DISCORD_BOT_TOKEN', None)
     def test_run_startup_checks_no_exit(self):
-        """Test run_startup_checks doesn't exit when exit_on_critical is False."""
+        """Test run_startup_checks doesn't exit when exit_on_critical is False.
+
+        Verifies that run_startup_checks returns a StartupChecker
+        instance without raising SystemExit when exit_on_critical
+        is set to False, even with critical failures.
+        """
         with patch('src.utils.startup_checks.StartupChecker.run_all_checks'):
             with patch('src.utils.startup_checks.StartupChecker.has_critical_failures', return_value=True):
                 # Should not raise even with critical failures

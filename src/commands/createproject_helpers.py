@@ -51,8 +51,12 @@ from ..utils.text_utils import format_error_message
 def _generate_folder_structure_section(project_path: Path) -> str:
     """Generate the folder structure section of the unified message.
 
+    Args:
+        project_path: Path to the project directory.
+
     Returns:
-        Folder structure string, truncated to MAX_FOLDER_STRUCTURE_LENGTH with ellipsis.
+        str: Folder structure string, truncated to MAX_FOLDER_STRUCTURE_LENGTH
+            with ellipsis if exceeding the limit.
     """
     tree = get_folder_tree(project_path)
     folder_content = f"📁 {project_path.name}/\n{tree}"
@@ -66,8 +70,12 @@ def _generate_folder_structure_section(project_path: Path) -> str:
 async def _generate_copilot_output_section(output_buffer: AsyncOutputBuffer) -> str:
     """Generate the copilot output section of the unified message.
 
+    Args:
+        output_buffer: Async buffer containing the copilot process output.
+
     Returns:
-        Copilot output string, truncated to MAX_COPILOT_OUTPUT_LENGTH.
+        str: Copilot output string, truncated to MAX_COPILOT_OUTPUT_LENGTH
+            from the end to preserve the most recent output.
     """
     full_output = await output_buffer.get_content()
     if not full_output:
@@ -93,20 +101,27 @@ def _generate_summary_section(
 ) -> str:
     """Generate the project creation summary section.
 
+    Builds a formatted summary string containing status, prompt, model,
+    file/directory counts, user mention, and optional GitHub status.
+
     Args:
-        interaction: The Discord interaction.
-        prompt: The user's prompt.
-        model: The model name (if specified).
-        project_path: Path to the project directory.
-        timed_out: Whether the process timed out.
-        error_occurred: Whether an error occurred.
-        error_message: The error message (if any).
-        process: The subprocess process object.
-        github_status: GitHub integration status string.
-        is_complete: Whether the process has completed.
+        interaction: The Discord interaction containing user context.
+        prompt: The user's original prompt for project creation.
+        model: The model name if specified, None for default.
+        project_path: Path to the project directory for file counting.
+        timed_out: Whether the copilot process timed out. Defaults to False.
+        error_occurred: Whether an error occurred during execution.
+            Defaults to False.
+        error_message: The error message if an error occurred.
+            Defaults to empty string.
+        process: The subprocess process object for exit code retrieval.
+            Defaults to None.
+        github_status: GitHub integration status string to append.
+            Defaults to empty string.
+        is_complete: Whether the process has completed. Defaults to False.
 
     Returns:
-        Summary section string.
+        str: Formatted summary section string for the Discord message.
     """
     # Determine status
     if not is_complete:
@@ -148,12 +163,18 @@ def _build_unified_message(
 ) -> str:
     """Build the unified message from all three sections.
 
-    Format:
-    <Folder Structure>
-    <Copilot Output>
-    <Summary>
+    Combines folder structure, copilot output, and summary into a single
+    Discord message. Each section is wrapped in code blocks and truncated
+    as needed to fit within Discord's 2000 character limit.
 
-    Ensures each section is truncated to fit within Discord's 2000 char limit.
+    Args:
+        folder_section: The folder structure content to display.
+        output_section: The copilot output content to display.
+        summary_section: The summary content to display.
+
+    Returns:
+        str: The complete unified message string formatted for Discord,
+            with each section properly truncated if necessary.
     """
     # Truncate each section to its max length
     if len(folder_section) > MAX_FOLDER_STRUCTURE_LENGTH:
@@ -193,7 +214,23 @@ async def update_unified_message(
 ) -> None:
     """Update the unified message combining folder structure, output, and summary.
 
-    Polls every 3 seconds to update all three sections in a single message.
+    Polls at regular intervals (UPDATE_INTERVAL) to update all three sections
+    in a single Discord message. Continues updating until the process completes
+    or an error occurs. Handles expired Discord interaction tokens by
+    re-fetching the message.
+
+    Args:
+        message: The Discord message object to update.
+        project_path: Path to the project directory for folder structure.
+        output_buffer: Async buffer containing copilot process output.
+        interaction: The Discord interaction for user context.
+        prompt: The user's original prompt for the summary section.
+        model: The model name if specified, None for default.
+        is_running: Event that signals if the copilot process is still running.
+        error_event: Event that signals if an error has occurred.
+
+    Returns:
+        None
     """
     from ..config import UPDATE_INTERVAL
     from ..utils.github import DISCORD_INVALID_WEBHOOK_TOKEN
@@ -246,7 +283,18 @@ async def update_unified_message(
 
 
 async def read_stream(stream, output_buffer: AsyncOutputBuffer) -> None:
-    """Read from stream and append to buffer, also logging to console."""
+    """Read from stream and append to buffer, also logging to console.
+
+    Continuously reads lines from an async stream until EOF, decoding
+    each line as UTF-8 and appending to the output buffer.
+
+    Args:
+        stream: An async stream (stdout/stderr) from a subprocess.
+        output_buffer: Async buffer to append decoded output lines.
+
+    Returns:
+        None
+    """
     while True:
         line = await stream.readline()
         if not line:
@@ -264,17 +312,22 @@ async def create_project_directory(
 
     Uses Azure OpenAI to generate a creative repository name if configured,
     otherwise falls back to the standard username_timestamp_uuid format.
+    Also creates a COPILOT-PROMPT.md file with the original prompt.
 
     Args:
-        username: Sanitized username for fallback naming.
-        session_log: Session log collector.
+        username: Sanitized username for fallback naming when creative
+            name generation is unavailable.
+        session_log: Session log collector for status logging.
         prompt: Project description used to generate creative names.
+            Defaults to empty string.
 
     Returns:
-        Tuple of (project_path, folder_name)
+        tuple: A tuple containing:
+            - project_path (Path): The full path to the created directory.
+            - folder_name (str): The name of the created folder.
 
     Raises:
-        Exception: If directory creation fails.
+        OSError: If directory creation fails due to permissions or disk issues.
     """
     # Try to generate a creative name using Azure OpenAI
     creative_name = None
@@ -341,8 +394,18 @@ async def send_initial_message(
 ) -> discord.Message:
     """Send initial unified Discord message and return message object.
 
+    Creates and sends the initial placeholder message showing the project
+    creation has started. The message includes folder structure, copilot
+    output, and summary sections with placeholder content.
+
+    Args:
+        interaction: The Discord interaction to send the followup to.
+        project_path: Path to the project directory for display.
+        prompt: The user's original prompt for the summary.
+        model: The model name if specified, None for default.
+
     Returns:
-        The unified message object.
+        discord.Message: The sent Discord message object for later updates.
     """
     # Build initial unified message with placeholder content
     folder_section = f"📁 {project_path.name}/\n(initializing...)"
@@ -378,17 +441,26 @@ async def run_copilot_process(
 ) -> Tuple[bool, bool, str, Optional[asyncio.subprocess.Process]]:
     """Run the copilot process and return status.
 
+    Executes the GitHub Copilot CLI with the provided prompt in the project
+    directory. Handles process output streaming, timeout enforcement, and
+    progress logging during execution.
+
     Args:
-        project_path: Path to the project directory.
+        project_path: Path to the project directory where copilot runs.
         full_prompt: The full prompt including any prepended templates.
-        model: Optional model name.
-        session_log: Session log collector.
-        output_buffer: Async output buffer.
-        is_running: Event that signals if the process is still running.
-        error_event: Event that signals if an error has occurred.
+        model: Optional model name to pass to copilot CLI.
+        session_log: Session log collector for status logging.
+        output_buffer: Async buffer to collect copilot process output.
+        is_running: Event that remains set while process is running.
+        error_event: Event to set if an error occurs during execution.
 
     Returns:
-        Tuple of (timed_out, error_occurred, error_message, process)
+        tuple: A tuple containing:
+            - timed_out (bool): Whether the process exceeded timeout.
+            - error_occurred (bool): Whether an exception was raised.
+            - error_message (str): The error traceback if an error occurred.
+            - process (Optional[asyncio.subprocess.Process]): The process
+                object, or None if process creation failed.
     """
     # Build command
     cmd = ["copilot", "-p", full_prompt] + COPILOT_DEFAULT_FLAGS
@@ -486,8 +558,30 @@ async def update_final_message(
 ) -> None:
     """Update the final state of the unified Discord message.
 
-    On successful completion, shows a clean summary without folder structure or copilot output.
-    On failure/timeout, shows the full message with all sections for debugging.
+    On successful completion, shows a clean summary without folder structure
+    or copilot output. On failure/timeout, shows the full message with all
+    sections for debugging purposes.
+
+    Args:
+        unified_msg: The Discord message object to update.
+        project_path: Path to the project directory for file counting.
+        output_buffer: Async buffer containing copilot process output.
+        interaction: The Discord interaction for user context.
+        prompt: The user's original prompt for the summary.
+        model: The model name if specified, None for default.
+        timed_out: Whether the copilot process timed out.
+        error_occurred: Whether an error occurred during execution.
+        error_message: The error message if an error occurred.
+        process: The subprocess process object for exit code retrieval.
+        github_status: GitHub integration status string to append.
+        project_name: Optional display name for the project.
+            Defaults to folder name if not provided.
+        description: Optional project description.
+            Defaults to placeholder text if not provided.
+        github_url: Optional GitHub repository URL for linking.
+
+    Returns:
+        None
     """
     from ..utils.github import DISCORD_INVALID_WEBHOOK_TOKEN
 
@@ -569,8 +663,25 @@ async def handle_github_integration(
 ) -> Tuple[str, bool, Optional[str], Optional[str]]:
     """Handle GitHub integration and return status string.
 
+    Creates a GitHub repository and pushes the project if GitHub integration
+    is enabled and the project creation was successful. Generates a
+    repository description using Azure OpenAI if configured.
+
+    Args:
+        project_path: Path to the project directory to push.
+        folder_name: Name to use for the GitHub repository.
+        prompt: The user's original prompt for description generation.
+        timed_out: Whether the copilot process timed out.
+        error_occurred: Whether an error occurred during execution.
+        process: The subprocess process object for exit code check.
+        session_log: Session log collector for status logging.
+
     Returns:
-        Tuple of (github_status, github_success, repo_description, github_url)
+        tuple: A tuple containing:
+            - github_status (str): Formatted status string for Discord display.
+            - github_success (bool): Whether GitHub push was successful.
+            - repo_description (Optional[str]): Generated or sanitized description.
+            - github_url (Optional[str]): URL of the created repository.
     """
     github_url = None
     github_status = ""
@@ -641,8 +752,20 @@ async def handle_github_integration(
 def _handle_remove_readonly(func, path, exc_info):
     """Error handler for shutil.rmtree to handle read-only files on Windows.
 
-    Git creates read-only files in .git/objects which cause Access Denied errors.
-    This handler removes the read-only attribute and retries the removal.
+    Git creates read-only files in .git/objects which cause Access Denied
+    errors. This handler removes the read-only attribute and retries the
+    removal operation.
+
+    Args:
+        func: The function that raised the exception (e.g., os.remove).
+        path: The path to the file that caused the error.
+        exc_info: Exception info tuple from sys.exc_info().
+
+    Raises:
+        Exception: Re-raises the original exception if not a PermissionError.
+
+    Returns:
+        None
     """
     # Check if it's a permission error (Access Denied)
     if isinstance(exc_info[1], PermissionError):
@@ -693,7 +816,29 @@ async def _send_log_file(
     dir_count: int,
     output_buffer: AsyncOutputBuffer,
 ) -> None:
-    """Send the log file attachment after project creation completes."""
+    """Send the log file attachment after project creation completes.
+
+    Generates a markdown log file containing the complete session log,
+    copilot output, and project statistics, then sends it as a Discord
+    file attachment.
+
+    Args:
+        interaction: The Discord interaction for channel access.
+        session_log: Session log collector containing all log entries.
+        folder_name: Name of the project folder for the log filename.
+        prompt: The user's original prompt for inclusion in the log.
+        model: The model name if specified, None for default.
+        timed_out: Whether the copilot process timed out.
+        error_occurred: Whether an error occurred during execution.
+        error_message: The error message if an error occurred.
+        process: The subprocess process object for exit code retrieval.
+        file_count: Total number of files created in the project.
+        dir_count: Total number of directories created in the project.
+        output_buffer: Async buffer containing copilot process output.
+
+    Returns:
+        None
+    """
     # Determine status text for log
     if timed_out:
         status_text = "TIMED OUT"

@@ -119,17 +119,43 @@ class MessageTemplates:
     
     @classmethod
     def format_session_started_with_desc(cls, desc_preview: str) -> str:
-        """Format the session started message with description."""
+        """Format the session started message with description.
+
+        Args:
+            desc_preview: A preview of the user's project description.
+
+        Returns:
+            A formatted string containing the session started message
+            with the description preview and AI response header.
+        """
         return cls.SESSION_STARTED_WITH_DESC.format(desc_preview=desc_preview)
     
     @classmethod
     def format_session_started_empty(cls, timeout_minutes: int) -> str:
-        """Format the session started message without description."""
+        """Format the session started message without description.
+
+        Args:
+            timeout_minutes: Number of minutes before the session expires
+                due to inactivity.
+
+        Returns:
+            A formatted string containing the session started message
+            with instructions and timeout information.
+        """
         return cls.SESSION_STARTED_EMPTY.format(timeout_minutes=timeout_minutes)
     
     @classmethod
     def format_session_exists_warning(cls, message_count: int, word_count: int) -> str:
-        """Format the existing session warning."""
+        """Format the existing session warning.
+
+        Args:
+            message_count: The number of messages collected in the session.
+            word_count: The total word count across all collected messages.
+
+        Returns:
+            A formatted warning string indicating an active session exists
+            with current message and word counts.
+        """
         return cls.SESSION_EXISTS_WARNING.format(
             message_count=message_count,
             word_count=word_count
@@ -137,7 +163,16 @@ class MessageTemplates:
     
     @classmethod
     def format_session_cancelled(cls, message_count: int, word_count: int) -> str:
-        """Format the session cancelled message."""
+        """Format the session cancelled message.
+
+        Args:
+            message_count: The number of messages that were discarded.
+            word_count: The total word count of discarded messages.
+
+        Returns:
+            A formatted string confirming session cancellation with
+            counts of discarded content.
+        """
         return cls.SESSION_CANCELLED.format(
             message_count=message_count,
             word_count=word_count
@@ -145,7 +180,16 @@ class MessageTemplates:
     
     @classmethod
     def format_progress_update(cls, message_count: int, word_count: int) -> str:
-        """Format the progress update message."""
+        """Format the progress update message.
+
+        Args:
+            message_count: The current number of messages in the session.
+            word_count: The current total word count in the session.
+
+        Returns:
+            A formatted string showing session progress with message
+            and word counts.
+        """
         return cls.PROGRESS_UPDATE.format(
             message_count=message_count,
             word_count=word_count
@@ -153,7 +197,18 @@ class MessageTemplates:
     
     @classmethod
     def format_project_success(cls, summary: ProjectSummary) -> str:
-        """Format the successful project completion message."""
+        """Format the successful project completion message.
+
+        Args:
+            summary: A ProjectSummary dataclass containing project details
+                including status, prompt, model, file/dir counts, user mention,
+                and optional GitHub information.
+
+        Returns:
+            A formatted string containing the complete project success message
+            with project name, description, model, file counts, user mention,
+            and GitHub link if available.
+        """
         github_link = ""
         if summary.github_url:
             github_link = f"\n**🐙 GitHub:** [View Repository]({summary.github_url})"
@@ -181,7 +236,23 @@ class MessageTemplates:
         user_mention: str,
         github_status: str = ""
     ) -> str:
-        """Format the project summary section."""
+        """Format the project summary section.
+
+        Args:
+            status: The current status of the project (e.g., "IN PROGRESS",
+                "COMPLETED").
+            truncated_prompt: A shortened version of the user's prompt.
+            model: The AI model used for project generation.
+            file_count: The number of files created in the project.
+            dir_count: The number of directories created in the project.
+            user_mention: The Discord mention string for the user.
+            github_status: Optional status message for GitHub integration.
+                Defaults to an empty string.
+
+        Returns:
+            A formatted summary string containing all project details
+            in a structured format.
+        """
         return cls.SUMMARY_TEMPLATE.format(
             status=status,
             truncated_prompt=truncated_prompt,

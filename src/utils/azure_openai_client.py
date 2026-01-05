@@ -49,7 +49,11 @@ class AzureOpenAIClient:
 
     @property
     def client(self) -> Optional[AzureOpenAI]:
-        """Lazy-load the Azure OpenAI client."""
+        """Lazy-load the Azure OpenAI client.
+
+        Returns:
+            The Azure OpenAI client instance, or None if not configured.
+        """
         if self._client is None and self.is_configured():
             self._client = AzureOpenAI(
                 azure_endpoint=self.endpoint,
@@ -59,7 +63,12 @@ class AzureOpenAIClient:
         return self._client
 
     def is_configured(self) -> bool:
-        """Check if Azure OpenAI integration is properly configured."""
+        """Check if Azure OpenAI integration is properly configured.
+
+        Returns:
+            True if endpoint, api_key, and deployment_name are all set,
+            False otherwise.
+        """
         return bool(self.endpoint and self.api_key and self.deployment_name)
 
     def complete_sync(
@@ -259,6 +268,13 @@ def get_azure_openai_client() -> AzureOpenAIClient:
 
 
 def reset_azure_openai_client() -> None:
-    """Reset the Azure OpenAI client (useful for testing)."""
+    """Reset the Azure OpenAI client singleton instance.
+
+    This is useful for testing to ensure a fresh client is created
+    on the next call to get_azure_openai_client().
+
+    Returns:
+        None
+    """
     global _azure_openai_client
     _azure_openai_client = None

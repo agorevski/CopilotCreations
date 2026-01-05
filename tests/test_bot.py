@@ -15,10 +15,11 @@ class TestBotConfiguration:
     """Tests for bot configuration values."""
     
     def test_config_values(self):
-        """
-        Tests bot configuration:
-        - PROJECTS_DIR is configured with correct name
-        - DISCORD_BOT_TOKEN is None or string
+        """Test that bot configuration values are properly set.
+
+        Verifies that:
+            - PROJECTS_DIR is configured with the correct name 'projects'.
+            - DISCORD_BOT_TOKEN is either None or a string.
         """
         assert PROJECTS_DIR is not None
         assert PROJECTS_DIR.name == "projects"
@@ -29,12 +30,13 @@ class TestCopilotBot:
     """Tests for CopilotBot class covering factory functions, singleton pattern, and semaphore."""
     
     def test_bot_factory_functions(self):
-        """
-        Tests bot factory and singleton patterns:
-        - get_bot returns CopilotBot instance with command tree
-        - create_bot returns new instances each time
-        - get_bot returns same singleton instance
-        - reset_bot clears the singleton
+        """Test bot factory and singleton pattern functions.
+
+        Verifies that:
+            - get_bot returns a CopilotBot instance with a command tree.
+            - create_bot returns new instances each time it is called.
+            - get_bot returns the same singleton instance on repeated calls.
+            - reset_bot clears the singleton allowing a new instance to be created.
         """
         from src.bot import get_bot, create_bot, reset_bot, CopilotBot
         
@@ -62,7 +64,11 @@ class TestCopilotBot:
         assert bot5 is not None
     
     def test_run_bot_requires_token(self):
-        """Tests that run_bot raises ValueError without DISCORD_BOT_TOKEN."""
+        """Test that run_bot raises ValueError when DISCORD_BOT_TOKEN is missing.
+
+        Raises:
+            ValueError: When DISCORD_BOT_TOKEN is None.
+        """
         from src.bot import run_bot
         
         with patch('src.bot.DISCORD_BOT_TOKEN', None):
@@ -70,10 +76,11 @@ class TestCopilotBot:
                 run_bot()
     
     def test_bot_attributes(self):
-        """
-        Tests bot internal attributes:
-        - Has _shutdown_event (None initially)
-        - Has _request_semaphore attribute (None, lazy init)
+        """Test that bot has required internal attributes.
+
+        Verifies that:
+            - Bot has _shutdown_event attribute initialized to None.
+            - Bot has _request_semaphore attribute initialized to None (lazy init).
         """
         from src.bot import create_bot
         bot = create_bot()
@@ -86,11 +93,12 @@ class TestCopilotBot:
     
     @pytest.mark.asyncio
     async def test_request_semaphore(self):
-        """
-        Tests request_semaphore property:
-        - Returns asyncio.Semaphore instance
-        - Returns same instance (singleton per bot)
-        - Correctly limits concurrency
+        """Test request_semaphore property behavior.
+
+        Verifies that:
+            - The property returns an asyncio.Semaphore instance.
+            - The same instance is returned on repeated access (singleton per bot).
+            - The semaphore correctly limits concurrency to MAX_PARALLEL_REQUESTS.
         """
         import asyncio
         from src.bot import create_bot, MAX_PARALLEL_REQUESTS
@@ -110,6 +118,11 @@ class TestCopilotBot:
         max_concurrent = 0
         
         async def mock_operation():
+            """Simulate a concurrent operation using the semaphore.
+
+            Acquires the semaphore, tracks concurrency metrics, and releases
+            the semaphore after a short delay.
+            """
             nonlocal concurrent_count, max_concurrent
             await semaphore.acquire()
             try:
@@ -130,10 +143,12 @@ class TestOnReadyHandler:
     
     @pytest.mark.asyncio
     async def test_on_ready_logging(self):
-        """
-        Tests on_ready_handler logging:
-        - Logs info when bot is ready
-        - Logs GitHub status (enabled+configured, enabled+not configured, disabled)
+        """Test on_ready_handler logging behavior.
+
+        Verifies that:
+            - Info is logged when the bot is ready.
+            - GitHub status is logged correctly for all configurations:
+              enabled+configured, enabled+not configured, and disabled.
         """
         from src.bot import on_ready_handler, CopilotBot
         
@@ -179,10 +194,11 @@ class TestOnReadyHandler:
     
     @pytest.mark.asyncio
     async def test_on_ready_warnings(self):
-        """
-        Tests on_ready warnings for missing configuration:
-        - Warns when GitHub enabled but token missing
-        - Warns when GitHub enabled but username missing
+        """Test on_ready_handler warning behavior for missing configuration.
+
+        Verifies that:
+            - A warning is logged when GitHub is enabled but token is missing.
+            - A warning is logged when GitHub is enabled but username is missing.
         """
         from src.bot import on_ready_handler, CopilotBot
         
@@ -212,7 +228,10 @@ class TestOnReadyHandler:
     
     @pytest.mark.asyncio
     async def test_setup_hook(self):
-        """Tests that setup_hook syncs the command tree."""
+        """Test that setup_hook syncs the command tree.
+
+        Verifies that the bot's command tree sync method is called during setup.
+        """
         from src.bot import create_bot
         
         bot = create_bot()
@@ -227,7 +246,11 @@ class TestRunBot:
     """Tests for run_bot function covering token validation and bot.run call."""
     
     def test_run_bot_with_token(self):
-        """Tests run_bot calls bot.run with DISCORD_BOT_TOKEN."""
+        """Test that run_bot calls bot.run with the DISCORD_BOT_TOKEN.
+
+        Verifies that when a valid token is configured, the bot's run method
+        is called with that token.
+        """
         from src.bot import run_bot, reset_bot
         
         reset_bot()  # Start fresh
@@ -247,12 +270,13 @@ class TestGracefulShutdown:
     """Tests for graceful shutdown functionality including signal handling."""
     
     def test_signal_handler_setup_and_execution(self):
-        """
-        Tests signal handler setup and execution:
-        - Signal handlers can be set up without error
-        - SIGINT handler is registered (not default)
-        - Handler kills all processes and exits
-        - Handler schedules cleanup when event loop is running
+        """Test signal handler setup and execution behavior.
+
+        Verifies that:
+            - Signal handlers can be set up without error.
+            - SIGINT handler is registered and is not the default handler.
+            - Handler kills all processes and exits when loop is not running.
+            - Handler schedules cleanup when event loop is running.
         """
         from src.bot import setup_signal_handlers, create_bot
         import signal
@@ -307,10 +331,11 @@ class TestGracefulShutdown:
     
     @pytest.mark.asyncio
     async def test_bot_cleanup(self):
-        """
-        Tests bot cleanup method:
-        - Can be called when not closed (calls close)
-        - Handles already-closed state (skips close)
+        """Test bot cleanup method behavior.
+
+        Verifies that:
+            - When the bot is not closed, cleanup calls the close method.
+            - When the bot is already closed, cleanup skips calling close.
         """
         from src.bot import create_bot
         

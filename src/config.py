@@ -113,7 +113,11 @@ def get_required_prompt_template(command_name: str) -> str:
 
 
 def is_initialized() -> bool:
-    """Check if configuration has been initialized."""
+    """Check if configuration has been initialized.
+
+    Returns:
+        bool: True if init_config() has been called successfully, False otherwise.
+    """
     return _initialized
 
 

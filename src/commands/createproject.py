@@ -67,7 +67,21 @@ __all__ = [
 
 
 def setup_createproject_command(bot) -> Callable:
-    """Set up the /createproject command on the bot."""
+    """Set up the /createproject command on the bot.
+
+    Creates and registers a Discord slash command that allows users to generate
+    new projects using the Copilot CLI. The command handles prompt validation,
+    project directory creation, Copilot process execution, and optional GitHub
+    integration.
+
+    Args:
+        bot: The Discord bot instance to register the command on. Must have a
+            `tree` attribute for app commands and a `request_semaphore` for
+            rate limiting.
+
+    Returns:
+        Callable: The registered createproject command function.
+    """
     import asyncio
     import traceback
 
@@ -85,7 +99,27 @@ def setup_createproject_command(bot) -> Callable:
         prompt: str,
         model: Optional[str] = None,
     ) -> None:
-        """Handle the /createproject command."""
+        """Handle the /createproject command.
+
+        Processes a user's project creation request by validating inputs,
+        creating a project directory, running the Copilot CLI process,
+        and optionally pushing the result to GitHub.
+
+        Args:
+            interaction: The Discord interaction object containing user and
+                channel context.
+            prompt: The user's description of what project to create. Must be
+                non-empty and within MAX_PROMPT_LENGTH characters.
+            model: Optional model name to use for generation (e.g., 'gpt-4',
+                'claude-3-opus'). If None, uses the default model.
+
+        Returns:
+            None. Results are communicated via Discord messages.
+
+        Raises:
+            No exceptions are raised; errors are caught and reported to the
+            user via Discord messages.
+        """
         # Validate prompt
         prompt = prompt.strip()
         if not prompt:

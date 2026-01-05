@@ -28,40 +28,77 @@ class PromptSession:
     message_ids: List[int] = field(default_factory=list)  # Discord message IDs to delete on build
     
     def add_message(self, content: str, message_id: Optional[int] = None) -> None:
-        """Add a user message to the session."""
+        """Add a user message to the session.
+        
+        Args:
+            content: The message content to add.
+            message_id: Optional Discord message ID to track for deletion.
+        """
         self.messages.append(content)
         if message_id:
             self.message_ids.append(message_id)
         self.last_activity = datetime.now()
     
     def add_bot_message_id(self, message_id: int) -> None:
-        """Track a bot message ID for deletion on build."""
+        """Track a bot message ID for deletion on build.
+        
+        Args:
+            message_id: Discord message ID to track.
+        """
         self.message_ids.append(message_id)
     
     def add_conversation_turn(self, role: str, content: str) -> None:
-        """Add a conversation turn (user or assistant) to history."""
+        """Add a conversation turn (user or assistant) to history.
+        
+        Args:
+            role: The role of the speaker ('user' or 'assistant').
+            content: The message content.
+        """
         self.conversation_history.append({"role": role, "content": content})
         self.last_activity = datetime.now()
     
     def get_full_user_input(self) -> str:
-        """Get all user messages concatenated."""
+        """Get all user messages concatenated.
+        
+        Returns:
+            All user messages joined with double newlines.
+        """
         return "\n\n".join(self.messages)
     
     def get_word_count(self) -> int:
-        """Get total word count across all messages."""
+        """Get total word count across all messages.
+        
+        Returns:
+            Total number of words in all messages.
+        """
         full_text = self.get_full_user_input()
         return len(full_text.split())
     
     def get_char_count(self) -> int:
-        """Get total character count across all messages."""
+        """Get total character count across all messages.
+        
+        Returns:
+            Total number of characters in all messages.
+        """
         return len(self.get_full_user_input())
     
     def get_message_count(self) -> int:
-        """Get total number of messages."""
+        """Get total number of messages.
+        
+        Returns:
+            Number of messages in the session.
+        """
         return len(self.messages)
     
     def is_expired(self, timeout_minutes: int) -> bool:
-        """Check if the session has expired due to inactivity."""
+        """Check if the session has expired due to inactivity.
+        
+        Args:
+            timeout_minutes: Number of minutes of inactivity before expiration.
+            
+        Returns:
+            True if the session has expired, False otherwise.
+        """
         expiry_time = self.last_activity + timedelta(minutes=timeout_minutes)
         return datetime.now() > expiry_time
     
@@ -88,7 +125,15 @@ class SessionManager:
         self._cleanup_task: Optional[asyncio.Task] = None
     
     def _get_key(self, user_id: int, channel_id: int) -> Tuple[int, int]:
-        """Get the session key for a user/channel pair."""
+        """Get the session key for a user/channel pair.
+        
+        Args:
+            user_id: Discord user ID.
+            channel_id: Discord channel ID.
+            
+        Returns:
+            A tuple of (user_id, channel_id) to use as dictionary key.
+        """
         return (user_id, channel_id)
     
     async def start_session(self, user_id: int, channel_id: int) -> PromptSession:
@@ -223,13 +268,20 @@ class SessionManager:
             logger.info(f"Started session cleanup task (interval: {interval_minutes} minutes)")
     
     def stop_cleanup_task(self) -> None:
-        """Stop the background cleanup task."""
+        """Stop the background cleanup task.
+        
+        Cancels the periodic cleanup task if it is running.
+        """
         if self._cleanup_task and not self._cleanup_task.done():
             self._cleanup_task.cancel()
             logger.info("Stopped session cleanup task")
     
     def get_active_session_count(self) -> int:
-        """Get the number of active sessions."""
+        """Get the number of active sessions.
+        
+        Returns:
+            Count of currently active sessions.
+        """
         return len(self._sessions)
 
 
@@ -253,7 +305,10 @@ def get_session_manager(timeout_minutes: int = 30) -> SessionManager:
 
 
 def reset_session_manager() -> None:
-    """Reset the session manager (useful for testing)."""
+    """Reset the session manager (useful for testing).
+    
+    Stops any running cleanup task and clears the singleton instance.
+    """
     global _session_manager
     if _session_manager:
         _session_manager.stop_cleanup_task()

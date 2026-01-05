@@ -11,7 +11,11 @@ _logger: Optional[logging.Logger] = None
 
 
 def get_logger() -> logging.Logger:
-    """Get the application logger, initializing if needed."""
+    """Get the application logger, initializing if needed.
+
+    Returns:
+        logging.Logger: The configured application logger instance.
+    """
     global _logger
     if _logger is None:
         logging.basicConfig(
@@ -25,9 +29,13 @@ def get_logger() -> logging.Logger:
 
 def setup_logging() -> logging.Logger:
     """Configure and return the application logger.
-    
-    Deprecated: Use get_logger() instead. This function is kept for
-    backward compatibility.
+
+    Deprecated:
+        Use get_logger() instead. This function is kept for
+        backward compatibility.
+
+    Returns:
+        logging.Logger: The configured application logger instance.
     """
     return get_logger()
 
@@ -40,12 +48,22 @@ class SessionLogCollector:
     """Collects log messages for a specific session/command."""
     
     def __init__(self, session_id: str) -> None:
+        """Initialize a new session log collector.
+
+        Args:
+            session_id: Unique identifier for the session being logged.
+        """
         self.session_id = session_id
         self.logs: List[str] = []
         self.start_time = datetime.now()
     
     def log(self, level: str, message: str) -> None:
-        """Add a log entry."""
+        """Add a log entry with the specified level.
+
+        Args:
+            level: The log level (e.g., 'INFO', 'WARNING', 'ERROR').
+            message: The message to log.
+        """
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         entry = f"{timestamp} | {level:<8} | [{self.session_id}] {message}"
         self.logs.append(entry)
@@ -53,20 +71,32 @@ class SessionLogCollector:
         getattr(logger, level.lower(), logger.info)(f"[{self.session_id}] {message}")
     
     def info(self, message: str) -> None:
-        """Log an info message."""
+        """Log an info message.
+
+        Args:
+            message: The informational message to log.
+        """
         self.log("INFO", message)
     
     def warning(self, message: str) -> None:
-        """Log a warning message."""
+        """Log a warning message.
+
+        Args:
+            message: The warning message to log.
+        """
         self.log("WARNING", message)
     
     def error(self, message: str) -> None:
-        """Log an error message."""
+        """Log an error message.
+
+        Args:
+            message: The error message to log.
+        """
         self.log("ERROR", message)
     
     def get_markdown(self, prompt: str, model: str, status: str, file_count: int, dir_count: int, copilot_output: str = "") -> str:
         """Generate markdown content for the log file.
-        
+
         Args:
             prompt: The user's prompt.
             model: The model used.
@@ -74,6 +104,9 @@ class SessionLogCollector:
             file_count: Number of files created.
             dir_count: Number of directories created.
             copilot_output: The raw output from the copilot command.
+
+        Returns:
+            str: Formatted markdown string containing the session log.
         """
         duration = datetime.now() - self.start_time
         minutes, seconds = divmod(int(duration.total_seconds()), 60)

@@ -25,15 +25,33 @@ class NamingService(Protocol):
     """Protocol for repository naming services (enables dependency injection)."""
 
     def is_configured(self) -> bool:
-        """Check if the naming service is properly configured."""
+        """Check if the naming service is properly configured.
+
+        Returns:
+            bool: True if the service is configured and ready to use, False otherwise.
+        """
         ...
 
     def generate_name(self, project_description: str) -> Optional[str]:
-        """Generate a creative repository name based on the project description."""
+        """Generate a creative repository name based on the project description.
+
+        Args:
+            project_description: A description of what the project does.
+
+        Returns:
+            Optional[str]: A creative repository name, or None if generation fails.
+        """
         ...
 
     def generate_description(self, project_description: str) -> Optional[str]:
-        """Generate a repository description based on the project description."""
+        """Generate a repository description based on the project description.
+
+        Args:
+            project_description: A description of what the project does.
+
+        Returns:
+            Optional[str]: A concise repository description, or None if generation fails.
+        """
         ...
 
 
@@ -66,31 +84,58 @@ class RepositoryNamingGenerator:
     # Proxy properties for backwards compatibility with tests
     @property
     def endpoint(self) -> Optional[str]:
-        """Azure OpenAI endpoint URL."""
+        """Get the Azure OpenAI endpoint URL.
+
+        Returns:
+            Optional[str]: The Azure OpenAI endpoint URL, or None if not configured.
+        """
         return self._ai_client.endpoint
 
     @property
     def api_key(self) -> Optional[str]:
-        """Azure OpenAI API key."""
+        """Get the Azure OpenAI API key.
+
+        Returns:
+            Optional[str]: The Azure OpenAI API key, or None if not configured.
+        """
         return self._ai_client.api_key
 
     @property
     def deployment_name(self) -> Optional[str]:
-        """Azure OpenAI deployment name."""
+        """Get the Azure OpenAI deployment name.
+
+        Returns:
+            Optional[str]: The Azure OpenAI deployment name, or None if not configured.
+        """
         return self._ai_client.deployment_name
 
     @property
     def api_version(self) -> Optional[str]:
-        """Azure OpenAI API version."""
+        """Get the Azure OpenAI API version.
+
+        Returns:
+            Optional[str]: The Azure OpenAI API version, or None if not configured.
+        """
         return self._ai_client.api_version
 
     @property
     def client(self):
-        """Azure OpenAI client (lazy-loaded)."""
+        """Get the Azure OpenAI client instance.
+
+        The client is lazy-loaded on first access.
+
+        Returns:
+            AzureOpenAI: The Azure OpenAI client instance.
+        """
         return self._ai_client.client
 
     def is_configured(self) -> bool:
-        """Check if Azure OpenAI integration is properly configured."""
+        """Check if Azure OpenAI integration is properly configured.
+
+        Returns:
+            bool: True if all required Azure OpenAI credentials are configured,
+                False otherwise.
+        """
         return self._ai_client.is_configured()
 
     def _sanitize_name(self, name: str) -> str:

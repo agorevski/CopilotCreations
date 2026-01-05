@@ -16,23 +16,40 @@ class ProcessRegistry:
     """Registry for tracking active subprocesses."""
     
     def __init__(self) -> None:
+        """Initialize the process registry.
+
+        Creates an empty set to track processes and a lock for thread-safe access.
+        """
         self._processes: Set[asyncio.subprocess.Process] = set()
         self._lock = asyncio.Lock()
     
     async def register(self, process: asyncio.subprocess.Process) -> None:
-        """Register a subprocess for tracking."""
+        """Register a subprocess for tracking.
+
+        Args:
+            process: The asyncio subprocess to track.
+        """
         async with self._lock:
             self._processes.add(process)
             logger.debug(f"Registered process PID {process.pid}")
     
     async def unregister(self, process: asyncio.subprocess.Process) -> None:
-        """Unregister a subprocess from tracking."""
+        """Unregister a subprocess from tracking.
+
+        Args:
+            process: The asyncio subprocess to stop tracking.
+        """
         async with self._lock:
             self._processes.discard(process)
             logger.debug(f"Unregistered process PID {process.pid}")
     
     async def kill_all(self) -> None:
-        """Kill all tracked subprocesses."""
+        """Kill all tracked subprocesses.
+
+        Iterates through all registered processes and terminates any that are
+        still running. Waits up to 5 seconds for each process to terminate.
+        Clears the registry after processing.
+        """
         async with self._lock:
             if not self._processes:
                 return
@@ -54,7 +71,12 @@ class ProcessRegistry:
             self._processes.clear()
     
     def kill_all_sync(self) -> None:
-        """Synchronously kill all tracked subprocesses (for signal handlers)."""
+        """Synchronously kill all tracked subprocesses.
+
+        This method is intended for use in signal handlers where async
+        operations are not available. It sends kill signals without waiting
+        for processes to terminate.
+        """
         if not self._processes:
             return
         
@@ -73,7 +95,11 @@ class ProcessRegistry:
     
     @property
     def active_count(self) -> int:
-        """Return the number of active tracked processes."""
+        """Return the number of active tracked processes.
+
+        Returns:
+            The count of currently tracked processes.
+        """
         return len(self._processes)
 
 
@@ -82,7 +108,11 @@ _process_registry: Optional[ProcessRegistry] = None
 
 
 def get_process_registry() -> ProcessRegistry:
-    """Get or create the global process registry."""
+    """Get or create the global process registry.
+
+    Returns:
+        The singleton ProcessRegistry instance.
+    """
     global _process_registry
     if _process_registry is None:
         _process_registry = ProcessRegistry()

@@ -14,11 +14,17 @@ class TestSessionLogCollector:
     """Tests for SessionLogCollector class covering initialization, logging, and markdown export."""
     
     def test_initialization_and_logging_levels(self):
-        """
-        Tests collector initialization and all logging levels:
-        - Initialization with session ID and empty logs
-        - INFO, WARNING, and ERROR log levels
-        - Multiple log entries accumulate correctly
+        """Test collector initialization and all logging levels.
+
+        Verifies that initialization sets session ID and empty logs list,
+        INFO, WARNING, and ERROR log levels work correctly, and multiple
+        log entries accumulate in order.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If any logging level or initialization check fails.
         """
         # Test initialization
         collector = SessionLogCollector("test_session")
@@ -40,12 +46,17 @@ class TestSessionLogCollector:
         assert "ERROR" in collector.logs[2]
     
     def test_get_markdown_basic(self):
-        """
-        Tests markdown export includes all required sections:
-        - Header with session ID
-        - Prompt and model info
-        - Status and file/dir counts
-        - Log entries and Copilot Output section
+        """Test markdown export includes all required sections.
+
+        Verifies that the generated markdown contains the header with session ID,
+        prompt and model info, status and file/dir counts, log entries and
+        Copilot Output section.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If any required markdown section is missing.
         """
         collector = SessionLogCollector("test_session")
         collector.info("Test log entry")
@@ -69,12 +80,17 @@ class TestSessionLogCollector:
         assert "## Copilot Output" in md
     
     def test_get_markdown_with_copilot_output(self):
-        """
-        Tests markdown export with Copilot output:
-        - Copilot output section populated correctly
-        - Multiline output preserved
-        - Special chars and unicode handled correctly
-        - Empty output still shows section header
+        """Test markdown export with Copilot output.
+
+        Verifies that the Copilot output section is populated correctly,
+        multiline output is preserved, special characters and unicode are
+        handled correctly, and empty output still shows section header.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If Copilot output is not correctly rendered in markdown.
         """
         collector = SessionLogCollector("test_session")
         

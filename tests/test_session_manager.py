@@ -23,15 +23,19 @@ class TestPromptSession:
     """Tests for PromptSession dataclass covering all session operations."""
     
     def test_session_basics(self):
-        """
-        Tests basic session operations:
-        - Creation with user/channel IDs
-        - Empty initial state
-        - Adding messages
-        - Adding conversation turns
-        - Getting full user input (concatenated)
-        - Word and character counting
-        - Message counting
+        """Test basic session operations.
+
+        Tests the following PromptSession functionality:
+            - Creation with user/channel IDs
+            - Empty initial state
+            - Adding messages
+            - Adding conversation turns
+            - Getting full user input (concatenated)
+            - Word and character counting
+            - Message counting
+
+        Returns:
+            None
         """
         # Creation and initial state
         session = PromptSession(user_id=123, channel_id=456)
@@ -81,10 +85,14 @@ class TestPromptSession:
         assert session5.get_message_count() == 3
     
     def test_session_expiration(self):
-        """
-        Tests session expiration checking:
-        - Fresh session not expired
-        - Session expired after timeout
+        """Test session expiration checking.
+
+        Verifies that:
+            - Fresh session is not expired
+            - Session is expired after timeout period
+
+        Returns:
+            None
         """
         session = PromptSession(user_id=123, channel_id=456)
         
@@ -96,10 +104,14 @@ class TestPromptSession:
         assert session.is_expired(30)
     
     def test_final_prompt(self):
-        """
-        Tests get_final_prompt behavior:
-        - Without refinement (returns raw user input)
-        - With refinement (returns refined prompt)
+        """Test get_final_prompt behavior.
+
+        Verifies that:
+            - Without refinement, returns raw user input
+            - With refinement, returns refined prompt
+
+        Returns:
+            None
         """
         # Without refinement
         session = PromptSession(user_id=123, channel_id=456)
@@ -116,23 +128,34 @@ class TestSessionManager:
     
     @pytest.fixture
     def manager(self):
-        """Create a fresh session manager for each test."""
+        """Create a fresh session manager for each test.
+
+        Yields:
+            SessionManager: A new SessionManager instance with 30-minute timeout.
+        """
         return SessionManager(timeout_minutes=30)
     
     @pytest.mark.asyncio
     async def test_session_crud(self, manager):
-        """
-        Tests session CRUD operations:
-        - Start session
-        - Get existing session
-        - Get non-existent session (None)
-        - Get expired session (None)
-        - End session
-        - End non-existent session (None)
-        - has_active_session check
-        - Add message to session
-        - Add message without session (False)
-        - Start session replaces existing
+        """Test session CRUD operations.
+
+        Args:
+            manager (SessionManager): SessionManager fixture instance.
+
+        Tests the following operations:
+            - Start session
+            - Get existing session
+            - Get non-existent session (returns None)
+            - Get expired session (returns None)
+            - End session
+            - End non-existent session (returns None)
+            - has_active_session check
+            - Add message to session
+            - Add message without session (returns False)
+            - Start session replaces existing
+
+        Returns:
+            None
         """
         # Start session
         session = await manager.start_session(123, 456)
@@ -184,12 +207,19 @@ class TestSessionManager:
     
     @pytest.mark.asyncio
     async def test_cleanup_operations(self, manager):
-        """
-        Tests cleanup operations:
-        - Cleanup expired sessions
-        - get_active_session_count
-        - Cleanup logs when sessions cleaned
-        - Start/stop cleanup task
+        """Test cleanup operations.
+
+        Args:
+            manager (SessionManager): SessionManager fixture instance.
+
+        Tests the following cleanup functionality:
+            - Cleanup expired sessions
+            - get_active_session_count
+            - Cleanup logs when sessions cleaned
+            - Start/stop cleanup task
+
+        Returns:
+            None
         """
         # Cleanup expired sessions
         session1 = await manager.start_session(123, 456)
@@ -238,18 +268,34 @@ class TestSingletonSessionManager:
     """Tests for singleton session manager access."""
     
     def setup_method(self):
-        """Reset the singleton before each test."""
+        """Reset the singleton before each test.
+
+        Called automatically by pytest before each test method.
+
+        Returns:
+            None
+        """
         reset_session_manager()
     
     def teardown_method(self):
-        """Reset the singleton after each test."""
+        """Reset the singleton after each test.
+
+        Called automatically by pytest after each test method.
+
+        Returns:
+            None
+        """
         reset_session_manager()
     
     def test_singleton_behavior(self):
-        """
-        Tests singleton behavior:
-        - get_session_manager returns same instance
-        - reset_session_manager clears singleton
+        """Test singleton behavior.
+
+        Verifies that:
+            - get_session_manager returns same instance
+            - reset_session_manager clears singleton
+
+        Returns:
+            None
         """
         manager1 = get_session_manager()
         manager2 = get_session_manager()

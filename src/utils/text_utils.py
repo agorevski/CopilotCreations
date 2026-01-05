@@ -13,7 +13,16 @@ MIN_BREAK_POINT_RATIO = 0.5
 
 
 def truncate_output(output: str, max_length: int = MAX_MESSAGE_LENGTH) -> str:
-    """Truncate output to the last max_length characters."""
+    """Truncate output to the last max_length characters.
+
+    Args:
+        output: The string to truncate.
+        max_length: Maximum allowed length (default: MAX_MESSAGE_LENGTH).
+
+    Returns:
+        The original string if within limit, otherwise the last max_length
+        characters prefixed with '...'.
+    """
     if len(output) <= max_length:
         return output
     return "..." + output[-(max_length - 3) :]

@@ -57,8 +57,11 @@ from .createproject import (
 def setup_session_commands(bot: "CopilotBot") -> tuple:
     """Set up the session-based project commands on the bot.
 
+    Args:
+        bot: The CopilotBot instance to register commands on.
+
     Returns:
-        Tuple of (startproject, buildproject, cancelprompt) command functions.
+        tuple: Tuple of (startproject, buildproject, cancelprompt) command functions.
     """
     session_manager = get_session_manager(SESSION_TIMEOUT_MINUTES)
     refinement_service = get_refinement_service()
@@ -71,7 +74,19 @@ def setup_session_commands(bot: "CopilotBot") -> tuple:
     async def startproject(
         interaction: discord.Interaction, description: Optional[str] = None
     ) -> None:
-        """Start a new prompt-building session."""
+        """Start a new prompt-building session.
+
+        Initiates a conversational session where the user can iteratively build
+        their project prompt with AI assistance. The session persists across
+        multiple messages until finalized with /buildproject.
+
+        Args:
+            interaction: The Discord interaction that triggered this command.
+            description: Optional initial description of the project idea.
+
+        Returns:
+            None
+        """
         await interaction.response.defer()
 
         user_id = interaction.user.id
@@ -235,7 +250,20 @@ def setup_session_commands(bot: "CopilotBot") -> tuple:
     async def buildproject(
         interaction: discord.Interaction, model: Optional[str] = None
     ) -> None:
-        """Finalize the session and create the project."""
+        """Finalize the session and create the project.
+
+        Compiles all collected messages from the active session into a final
+        prompt, optionally refines it using AI, and executes the project
+        creation process.
+
+        Args:
+            interaction: The Discord interaction that triggered this command.
+            model: Optional model name to use for project creation
+                (e.g., 'gpt-4', 'claude-3-opus').
+
+        Returns:
+            None
+        """
         user_id = interaction.user.id
         channel_id = interaction.channel.id
 
@@ -341,7 +369,17 @@ def setup_session_commands(bot: "CopilotBot") -> tuple:
         name="cancelprompt", description="Cancel your active prompt-building session"
     )
     async def cancelprompt(interaction: discord.Interaction) -> None:
-        """Cancel an active prompt session."""
+        """Cancel an active prompt session.
+
+        Terminates the user's current prompt-building session and discards
+        all collected messages without creating a project.
+
+        Args:
+            interaction: The Discord interaction that triggered this command.
+
+        Returns:
+            None
+        """
         user_id = interaction.user.id
         channel_id = interaction.channel.id
 
@@ -372,6 +410,17 @@ async def _execute_project_creation(
     """Execute the project creation process.
 
     This is extracted to be reusable from both /createproject and /buildproject.
+    Handles directory creation, copilot process execution, GitHub integration,
+    and cleanup.
+
+    Args:
+        interaction: The Discord interaction context for sending messages.
+        prompt: The finalized project prompt text.
+        model: Optional model name to use for generation.
+        bot: The CopilotBot instance for accessing shared resources.
+
+    Returns:
+        None
     """
     from ..utils import github_manager
 
@@ -504,8 +553,14 @@ async def _execute_project_creation(
 def setup_message_listener(bot: "CopilotBot") -> Callable:
     """Set up the message listener for capturing session messages.
 
+    Registers an event handler that captures user messages during active
+    prompt-building sessions and provides AI-assisted responses.
+
+    Args:
+        bot: The CopilotBot instance to register the listener on.
+
     Returns:
-        The on_message event handler function.
+        Callable: The on_message event handler function.
     """
     session_manager = get_session_manager()
     refinement_service = get_refinement_service()
@@ -517,6 +572,14 @@ def setup_message_listener(bot: "CopilotBot") -> Callable:
 
         For responses over 2000 chars, shows last 2000 chars until complete,
         then attaches the full response as a file.
+
+        Args:
+            message: The Discord message that triggered the response.
+            session: The active prompt-building session object.
+            content: The user's message content to respond to.
+
+        Returns:
+            None
         """
         bot_msg = None
         last_update_time = 0
@@ -603,7 +666,18 @@ def setup_message_listener(bot: "CopilotBot") -> Callable:
 
     @bot.event
     async def on_message(message: discord.Message) -> None:
-        """Handle incoming messages for active sessions."""
+        """Handle incoming messages for active sessions.
+
+        Listens for messages from users with active prompt-building sessions,
+        adds the message content to the session, and optionally provides
+        AI-assisted responses.
+
+        Args:
+            message: The incoming Discord message to process.
+
+        Returns:
+            None
+        """
         # Ignore bot messages
         if message.author.bot:
             return

@@ -17,7 +17,18 @@ DEFAULT_USERNAME = "unknown_user"
 
 
 def sanitize_username(username: str) -> str:
-    """Sanitize username to be safe for folder paths."""
+    """Sanitize username to be safe for folder paths.
+
+    Removes or replaces characters that are invalid in file system paths,
+    strips leading/trailing dots and spaces, and truncates to maximum length.
+
+    Args:
+        username: The original username to sanitize.
+
+    Returns:
+        A sanitized username safe for use in folder paths. Returns DEFAULT_USERNAME
+        if the sanitized result is empty.
+    """
     sanitized = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', username)
     sanitized = sanitized.strip('. ')
     sanitized = sanitized[:MAX_USERNAME_LENGTH]
@@ -25,7 +36,18 @@ def sanitize_username(username: str) -> str:
 
 
 def load_folderignore(base_path: Path) -> Set[str]:
-    """Load patterns from .folderignore file."""
+    """Load patterns from .folderignore file.
+
+    Searches for a .folderignore file starting from base_path and moving up
+    through parent directories. Falls back to the script directory if not found.
+
+    Args:
+        base_path: The starting directory path to search for .folderignore.
+
+    Returns:
+        A set of ignore patterns. Empty set if no .folderignore file is found
+        or if the file cannot be read.
+    """
     patterns = set()
     folderignore_path = base_path / ".folderignore"
     
@@ -63,7 +85,17 @@ def load_folderignore(base_path: Path) -> Set[str]:
 
 
 def is_ignored(item_name: str, patterns: Set[str]) -> bool:
-    """Check if an item matches any ignore pattern."""
+    """Check if an item matches any ignore pattern.
+
+    Uses fnmatch for pattern matching, supporting wildcards like * and ?.
+
+    Args:
+        item_name: The name of the file or directory to check.
+        patterns: A set of glob-style patterns to match against.
+
+    Returns:
+        True if the item matches any pattern, False otherwise.
+    """
     for pattern in patterns:
         # Match against the item name
         if fnmatch.fnmatch(item_name, pattern):
@@ -74,7 +106,15 @@ def is_ignored(item_name: str, patterns: Set[str]) -> bool:
 
 
 def count_files_recursive(path: Path) -> int:
-    """Count all files recursively in a directory."""
+    """Count all files recursively in a directory.
+
+    Args:
+        path: The directory path to count files in.
+
+    Returns:
+        The total number of files in the directory and all subdirectories.
+        Returns 0 if permission is denied.
+    """
     try:
         return sum(1 for _ in path.rglob('*') if _.is_file())
     except PermissionError:
@@ -82,7 +122,19 @@ def count_files_recursive(path: Path) -> int:
 
 
 def count_files_excluding_ignored(path: Path, ignore_patterns: Set[str] = None) -> Tuple[int, int]:
-    """Count files and directories excluding ignored folders."""
+    """Count files and directories excluding ignored folders.
+
+    Recursively counts files and directories while respecting ignore patterns.
+    Ignored directories are skipped entirely, not traversed.
+
+    Args:
+        path: The directory path to count items in.
+        ignore_patterns: Optional set of patterns to exclude. If None, patterns
+            are loaded from .folderignore file.
+
+    Returns:
+        A tuple of (file_count, directory_count) excluding ignored items.
+    """
     if ignore_patterns is None:
         ignore_patterns = load_folderignore(path)
     
@@ -114,10 +166,21 @@ def _get_inline_path(
     current_depth: int,
     ignore_patterns: Set[str]
 ) -> Tuple[str, bool]:
-    """
-    Check if a directory should be inlined (empty or single child).
-    Returns (inline_suffix, is_terminal) where inline_suffix is the path to append
-    and is_terminal indicates if we've reached the end of the chain.
+    """Check if a directory should be inlined (empty or single child).
+
+    Determines whether a directory path can be collapsed into a single line
+    representation (e.g., "parent/child/file.txt" instead of nested tree).
+
+    Args:
+        path: The directory path to check.
+        max_depth: Maximum depth to traverse.
+        current_depth: Current depth in the tree traversal.
+        ignore_patterns: Set of patterns to exclude from consideration.
+
+    Returns:
+        A tuple of (inline_suffix, is_terminal) where:
+            - inline_suffix: The path string to append (e.g., "/child/file.txt").
+            - is_terminal: True if this is the end of an inlinable chain.
     """
     if current_depth > max_depth:
         return "", False
@@ -158,10 +221,25 @@ def get_folder_tree(
     max_files_inline: int = 10
 ) -> str:
     """Generate a folder tree representation, respecting .folderignore patterns.
-    
-    Files in the same directory are grouped on a single line (comma-separated).
-    If there are more than max_files_inline files, shows first max_files_inline
-    and then "(+N files)" for the rest.
+
+    Creates a visual tree structure of directories and files. Files in the same
+    directory are grouped on a single line (comma-separated). Empty directories
+    are skipped, and single-child directory chains are inlined.
+
+    Args:
+        path: The root directory path to generate tree from.
+        prefix: String prefix for indentation (used internally for recursion).
+        max_depth: Maximum depth to traverse (default: 4).
+        current_depth: Current depth in traversal (used internally for recursion).
+        ignore_patterns: Optional set of patterns to exclude. If None, patterns
+            are loaded from .folderignore file.
+        max_files_inline: Maximum number of files to show before summarizing
+            with "(+N files)" (default: 10).
+
+    Returns:
+        A string representation of the folder tree. Returns "(folder not yet
+        created)" if path doesn't exist, or "(empty folder)" if no items remain
+        after filtering.
     """
     if current_depth > max_depth:
         return prefix + "...\n"

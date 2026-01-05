@@ -26,14 +26,17 @@ class TestSanitizeUsername:
     """Tests for sanitize_username function which cleans usernames for filesystem use."""
     
     def test_sanitization(self):
-        """
-        Tests username sanitization for various cases:
-        - Normal username (unchanged)
-        - Special characters removed (<>:"/\\|?*)
-        - Empty username returns default
-        - Dots-only returns default
-        - Long username truncated
-        - Leading/trailing dots and spaces stripped
+        """Test username sanitization for various cases.
+
+        Tests that usernames are properly sanitized for filesystem use.
+
+        Verifies:
+            Normal username remains unchanged.
+            Special characters (<>:"/\\|?*) are removed.
+            Empty username returns default.
+            Dots-only username returns default.
+            Long username is truncated.
+            Leading/trailing dots and spaces are stripped.
         """
         # Normal username unchanged
         assert sanitize_username("john_doe") == "john_doe"
@@ -69,12 +72,13 @@ class TestUsernameConstants:
     """Tests for username-related constants and their integration."""
     
     def test_constants_and_integration(self):
-        """
-        Tests username constants:
-        - MAX_USERNAME_LENGTH is 50
-        - DEFAULT_USERNAME is "unknown_user"
-        - sanitize_username respects MAX_USERNAME_LENGTH
-        - sanitize_username returns DEFAULT_USERNAME for empty
+        """Test username constants and their integration with sanitize_username.
+
+        Verifies:
+            MAX_USERNAME_LENGTH is 50.
+            DEFAULT_USERNAME is "unknown_user".
+            sanitize_username respects MAX_USERNAME_LENGTH.
+            sanitize_username returns DEFAULT_USERNAME for empty input.
         """
         assert isinstance(MAX_USERNAME_LENGTH, int)
         assert MAX_USERNAME_LENGTH > 0
@@ -97,12 +101,13 @@ class TestLoadFolderignore:
     """Tests for load_folderignore function which loads ignore patterns."""
     
     def test_load_patterns(self):
-        """
-        Tests loading .folderignore patterns:
-        - Loads patterns from directory
-        - Ignores comments and empty lines
-        - Strips trailing slashes
-        - Returns empty set for missing file
+        """Test loading .folderignore patterns from a directory.
+
+        Verifies:
+            Patterns are loaded from .folderignore file in directory.
+            Comments (lines starting with #) and empty lines are ignored.
+            Trailing slashes are stripped from patterns.
+            Returns empty set when .folderignore file is missing.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
@@ -142,14 +147,15 @@ class TestIsIgnored:
     """Tests for is_ignored function which checks if a path matches ignore patterns."""
     
     def test_pattern_matching(self):
-        """
-        Tests pattern matching:
-        - Exact match
-        - No match returns False
-        - Glob patterns (*.pyc)
-        - Empty patterns returns False
-        - Pattern with trailing slash
-        - Wildcard prefix patterns
+        """Test pattern matching against ignore patterns.
+
+        Verifies:
+            Exact matches return True.
+            Non-matching paths return False.
+            Glob patterns (e.g., *.pyc) work correctly.
+            Empty patterns set always returns False.
+            Patterns with trailing slashes match directories.
+            Wildcard prefix patterns (e.g., *.log) match appropriately.
         """
         # Exact match
         patterns = {"node_modules", "dist"}
@@ -179,12 +185,13 @@ class TestCountFilesRecursive:
     """Tests for count_files_recursive function."""
     
     def test_file_counting(self):
-        """
-        Tests recursive file counting:
-        - Empty directory (0)
-        - Directory with files
-        - Nested files (counts all)
-        - Deeply nested files
+        """Test recursive file counting in directories.
+
+        Verifies:
+            Empty directory returns 0.
+            Directory with files returns correct count.
+            Nested files are counted recursively.
+            Deeply nested files are included in the count.
         """
         # Empty directory
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -219,11 +226,12 @@ class TestCountFilesExcludingIgnored:
     """Tests for count_files_excluding_ignored function."""
     
     def test_exclusion_counting(self):
-        """
-        Tests counting with exclusions:
-        - Excludes ignored directories
-        - Counts all without ignore patterns
-        - Multiple ignored directories
+        """Test file counting with directory exclusions.
+
+        Verifies:
+            Ignored directories are excluded from counts.
+            All files are counted when no ignore patterns provided.
+            Multiple ignored directories are all excluded.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
@@ -273,15 +281,16 @@ class TestGetFolderTree:
     """Tests for get_folder_tree function which generates tree visualization."""
     
     def test_tree_generation(self):
-        """
-        Tests folder tree generation:
-        - Empty directory shows "(empty folder)"
-        - Contains file names
-        - Non-existent shows "not yet created"
-        - Ignored folders hidden
-        - Max depth limits output
-        - Directories sorted before files
-        - Tree connectors present
+        """Test folder tree generation and visualization.
+
+        Verifies:
+            Empty directory shows "(empty folder)".
+            Generated tree contains file names.
+            Non-existent path shows "not yet created".
+            Ignored folders are hidden from output.
+            Max depth parameter limits tree depth.
+            Directories are sorted before files.
+            Tree connectors (├, └) are present in output.
         """
         # Empty directory
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -344,14 +353,15 @@ class TestGetFolderTree:
             assert "├ " in result or "└ " in result
     
     def test_tree_formatting(self):
-        """
-        Tests folder tree formatting:
-        - Empty folders omitted
-        - Single file inlined with parent
-        - Nested single-child paths inlined
-        - Multiple files comma-separated
-        - Files truncated after max with (+N files)
-        - Directories before grouped files
+        """Test folder tree formatting and display options.
+
+        Verifies:
+            Empty folders are omitted from output.
+            Single file is inlined with parent directory.
+            Nested single-child paths are inlined (e.g., .github/workflows/ci.yaml).
+            Multiple files are comma-separated.
+            Files are truncated after max with (+N files) indicator.
+            Directories appear before grouped files.
         """
         # Empty folders omitted
         with tempfile.TemporaryDirectory() as tmpdir:

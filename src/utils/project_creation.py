@@ -52,7 +52,12 @@ class ProjectBuildState:
 
     @property
     def is_success(self) -> bool:
-        """Check if the build completed successfully."""
+        """Check if the build completed successfully.
+
+        Returns:
+            bool: True if the build completed without timeout or errors
+                and the process exited with return code 0.
+        """
         return (
             not self.timed_out
             and not self.error_occurred
@@ -80,7 +85,12 @@ class ProjectCreationService:
     """
 
     def __init__(self):
-        """Initialize the project creation service."""
+        """Initialize the project creation service.
+
+        Loads helper functions from createproject_helpers module to avoid
+        circular imports. These helpers handle directory creation, messaging,
+        process execution, and GitHub integration.
+        """
         # Import here to avoid circular imports
         from ..commands.createproject_helpers import (
             cleanup_project_directory,
@@ -263,7 +273,15 @@ _project_creation_service: Optional[ProjectCreationService] = None
 
 
 def get_project_creation_service() -> ProjectCreationService:
-    """Get the singleton project creation service instance."""
+    """Get the singleton project creation service instance.
+
+    Creates a new instance on first call and returns the same instance
+    on subsequent calls.
+
+    Returns:
+        ProjectCreationService: The singleton service instance for
+            orchestrating project creation workflows.
+    """
     global _project_creation_service
     if _project_creation_service is None:
         _project_creation_service = ProjectCreationService()
@@ -271,6 +289,11 @@ def get_project_creation_service() -> ProjectCreationService:
 
 
 def reset_project_creation_service() -> None:
-    """Reset the project creation service (useful for testing)."""
+    """Reset the project creation service singleton.
+
+    Clears the cached service instance, causing the next call to
+    get_project_creation_service() to create a fresh instance.
+    Primarily useful for testing to ensure a clean state between tests.
+    """
     global _project_creation_service
     _project_creation_service = None

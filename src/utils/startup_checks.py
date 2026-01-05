@@ -62,13 +62,30 @@ class StartupChecker:
         message: str,
         details: Optional[str] = None
     ) -> CheckResult:
-        """Add a check result to the results list."""
+        """Add a check result to the results list.
+
+        Args:
+            name: The name of the check.
+            status: The status of the check result.
+            message: A brief message describing the result.
+            details: Optional additional details about the result.
+
+        Returns:
+            The created CheckResult instance.
+        """
         result = CheckResult(name=name, status=status, message=message, details=details)
         self.results.append(result)
         return result
     
     def check_discord_token(self) -> CheckResult:
-        """Check if Discord bot token is configured."""
+        """Check if Discord bot token is configured.
+
+        Validates that the DISCORD_BOT_TOKEN environment variable is set
+        and performs basic format validation.
+
+        Returns:
+            CheckResult indicating pass, warn, or fail status.
+        """
         if not DISCORD_BOT_TOKEN:
             return self._add_result(
                 name="Discord Bot Token",
@@ -93,7 +110,14 @@ class StartupChecker:
         )
     
     def check_github_integration(self) -> CheckResult:
-        """Check GitHub integration configuration and connectivity."""
+        """Check GitHub integration configuration and connectivity.
+
+        Validates that GITHUB_TOKEN and GITHUB_USERNAME are set, then
+        tests API connectivity by authenticating with the GitHub API.
+
+        Returns:
+            CheckResult indicating pass, warn, fail, or skip status.
+        """
         if not GITHUB_ENABLED:
             return self._add_result(
                 name="GitHub Integration",
@@ -155,7 +179,14 @@ class StartupChecker:
             )
     
     def check_azure_openai(self) -> CheckResult:
-        """Check Azure OpenAI configuration and connectivity."""
+        """Check Azure OpenAI configuration and connectivity.
+
+        Validates that Azure OpenAI environment variables are set and
+        tests connectivity by making a minimal API request.
+
+        Returns:
+            CheckResult indicating pass, warn, or skip status.
+        """
         # Check if any Azure OpenAI config is set
         has_any_config = any([
             AZURE_OPENAI_ENDPOINT,
@@ -220,7 +251,14 @@ class StartupChecker:
             )
     
     def check_folder_access(self) -> CheckResult:
-        """Check folder access and write permissions."""
+        """Check folder access and write permissions.
+
+        Validates that the projects directory exists and is writable,
+        config.yaml is readable, and .gitignore exists if GitHub is enabled.
+
+        Returns:
+            CheckResult indicating pass, warn, or fail status.
+        """
         issues = []
         
         # Check projects directory
@@ -272,7 +310,14 @@ class StartupChecker:
         )
     
     def check_copilot_cli(self) -> CheckResult:
-        """Check if Copilot CLI (copilot.exe) is available."""
+        """Check if Copilot CLI (copilot.exe) is available.
+
+        Runs 'copilot --version' to verify the CLI is installed and
+        accessible in the system PATH.
+
+        Returns:
+            CheckResult indicating pass, warn, or fail status.
+        """
         try:
             # Check if copilot CLI is installed
             result = subprocess.run(
@@ -320,7 +365,14 @@ class StartupChecker:
             )
     
     def check_git(self) -> CheckResult:
-        """Check if Git is installed and configured."""
+        """Check if Git is installed and configured.
+
+        Runs 'git --version' to verify Git is installed and accessible
+        in the system PATH.
+
+        Returns:
+            CheckResult indicating pass or fail status.
+        """
         try:
             result = subprocess.run(
                 ["git", "--version"],
@@ -359,7 +411,14 @@ class StartupChecker:
             )
     
     def run_all_checks(self) -> List[CheckResult]:
-        """Run all startup checks and return results."""
+        """Run all startup checks and return results.
+
+        Executes all configured checks in order, logging results as they
+        complete, and provides a summary of pass/warn/fail/skip counts.
+
+        Returns:
+            List of CheckResult instances for all executed checks.
+        """
         self.results = []  # Reset results
         
         logger.info("=" * 60)
@@ -409,7 +468,11 @@ class StartupChecker:
         return self.results
     
     def _log_result(self, result: CheckResult) -> None:
-        """Log a check result with appropriate formatting."""
+        """Log a check result with appropriate formatting.
+
+        Args:
+            result: The CheckResult to log with status-appropriate icon and level.
+        """
         status_icons = {
             CheckStatus.PASS: "✓",
             CheckStatus.WARN: "⚠",
@@ -436,7 +499,14 @@ class StartupChecker:
                 logger.info(f"    └─ {result.details}")
     
     def has_critical_failures(self) -> bool:
-        """Check if any critical checks failed (Discord token, folder access)."""
+        """Check if any critical checks failed.
+
+        Critical checks include Discord Bot Token, Folder Access, and
+        Copilot CLI. Failure of these prevents the bot from functioning.
+
+        Returns:
+            True if any critical check has failed, False otherwise.
+        """
         critical_checks = ["Discord Bot Token", "Folder Access", "Copilot CLI"]
         for result in self.results:
             if result.name in critical_checks and result.status == CheckStatus.FAIL:
@@ -444,11 +514,19 @@ class StartupChecker:
         return False
     
     def get_failures(self) -> List[CheckResult]:
-        """Get all failed check results."""
+        """Get all failed check results.
+
+        Returns:
+            List of CheckResult instances with FAIL status.
+        """
         return [r for r in self.results if r.status == CheckStatus.FAIL]
     
     def get_warnings(self) -> List[CheckResult]:
-        """Get all warning check results."""
+        """Get all warning check results.
+
+        Returns:
+            List of CheckResult instances with WARN status.
+        """
         return [r for r in self.results if r.status == CheckStatus.WARN]
 
 

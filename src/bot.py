@@ -19,6 +19,12 @@ class CopilotBot(discord.Client):
     """Discord bot client with application commands support."""
     
     def __init__(self) -> None:
+        """
+        Initialize the CopilotBot with required intents and command tree.
+        
+        Sets up Discord intents for message content access and initializes
+        the application command tree for slash commands.
+        """
         intents = discord.Intents.default()
         intents.message_content = True  # Required for reading message content in sessions
         super().__init__(intents=intents)
@@ -28,17 +34,33 @@ class CopilotBot(discord.Client):
 
     @property
     def request_semaphore(self) -> asyncio.Semaphore:
-        """Get or create the request semaphore for limiting parallel requests."""
+        """
+        Get or create the request semaphore for limiting parallel requests.
+        
+        Returns:
+            asyncio.Semaphore: A semaphore initialized with MAX_PARALLEL_REQUESTS
+            to control concurrent request handling.
+        """
         if self._request_semaphore is None:
             self._request_semaphore = asyncio.Semaphore(MAX_PARALLEL_REQUESTS)
         return self._request_semaphore
 
     async def setup_hook(self) -> None:
-        """Called when the bot is ready to set up commands."""
+        """
+        Called when the bot is ready to set up commands.
+        
+        Synchronizes the application command tree with Discord to register
+        all slash commands globally.
+        """
         await self.tree.sync()
     
     async def cleanup(self) -> None:
-        """Cleanup resources before shutdown."""
+        """
+        Cleanup resources before shutdown.
+        
+        Gracefully closes the Discord connection if still open and logs
+        the cleanup process. Should be called during shutdown sequence.
+        """
         logger.info("Cleaning up resources...")
         # Close the Discord connection gracefully
         if not self.is_closed():
@@ -51,7 +73,12 @@ _bot_instance: Optional[CopilotBot] = None
 
 
 def get_bot() -> CopilotBot:
-    """Get or create the bot instance (singleton pattern)."""
+    """
+    Get or create the bot instance using singleton pattern.
+    
+    Returns:
+        CopilotBot: The global bot instance. Creates a new instance if none exists.
+    """
     global _bot_instance
     if _bot_instance is None:
         _bot_instance = CopilotBot()
@@ -59,18 +86,37 @@ def get_bot() -> CopilotBot:
 
 
 def create_bot() -> CopilotBot:
-    """Create a new bot instance (useful for testing)."""
+    """
+    Create a new bot instance independent of the global singleton.
+    
+    Returns:
+        CopilotBot: A fresh bot instance. Useful for testing scenarios
+        where isolated instances are needed.
+    """
     return CopilotBot()
 
 
 def reset_bot() -> None:
-    """Reset the global bot instance (useful for testing)."""
+    """
+    Reset the global bot instance to None.
+    
+    Clears the singleton instance, allowing a fresh bot to be created
+    on the next get_bot() call. Primarily used in testing for cleanup.
+    """
     global _bot_instance
     _bot_instance = None
 
 
 async def on_ready_handler(bot: CopilotBot) -> None:
-    """Handle the on_ready event."""
+    """
+    Handle the on_ready event when the bot successfully connects to Discord.
+    
+    Args:
+        bot: The CopilotBot instance that triggered the ready event.
+        
+    Logs bot status, configuration details including GitHub integration status,
+    and generates the OAuth2 invite URL for adding the bot to servers.
+    """
     logger.info(f"Bot is ready! Logged in as {bot.user}")
     logger.info(f"Projects will be saved to: {PROJECTS_DIR.absolute()}")
     logger.info(f"Max parallel requests: {MAX_PARALLEL_REQUESTS}")
@@ -96,7 +142,15 @@ async def on_ready_handler(bot: CopilotBot) -> None:
 
 
 def setup_signal_handlers(bot: CopilotBot) -> None:
-    """Set up signal handlers for graceful shutdown."""
+    """
+    Set up signal handlers for graceful shutdown.
+    
+    Args:
+        bot: The CopilotBot instance to clean up on shutdown.
+        
+    Registers handlers for SIGINT and SIGTERM (where available) to ensure
+    subprocesses are killed and resources are cleaned up before exit.
+    """
     def signal_handler(sig: int, frame) -> None:
         logger.info(f"Received signal {sig}, initiating graceful shutdown...")
         # Kill all tracked subprocesses synchronously
@@ -115,7 +169,15 @@ def setup_signal_handlers(bot: CopilotBot) -> None:
 
 
 def run_bot() -> None:
-    """Start the Discord bot."""
+    """
+    Start the Discord bot and begin handling events.
+    
+    Raises:
+        ValueError: If DISCORD_BOT_TOKEN environment variable is not set.
+        
+    Initializes the bot, sets up event handlers and signal handlers,
+    then starts the blocking run loop to process Discord events.
+    """
     if not DISCORD_BOT_TOKEN:
         raise ValueError("DISCORD_BOT_TOKEN environment variable is required")
     
@@ -138,7 +200,12 @@ def run_bot() -> None:
 # that uses the factory function
 @property
 def bot() -> CopilotBot:
-    """Get the bot instance."""
+    """
+    Get the bot instance for backward compatibility.
+    
+    Returns:
+        CopilotBot: The global bot instance via get_bot().
+    """
     return get_bot()
 
 

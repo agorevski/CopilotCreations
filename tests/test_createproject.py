@@ -40,7 +40,11 @@ class TestGenerateFolderStructureSection:
     """Tests for _generate_folder_structure_section function."""
 
     def test_generates_folder_structure(self):
-        """Test that folder structure is generated correctly."""
+        """Test that folder structure is generated correctly.
+
+        Creates a temporary directory with a file and subdirectory, then
+        verifies the generated folder structure contains expected elements.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             (tmppath / "test.txt").touch()
@@ -55,7 +59,11 @@ class TestGenerateFolderStructureSection:
             assert "subdir" in result
 
     def test_truncates_long_content(self):
-        """Test that long content is truncated with ellipsis."""
+        """Test that long content is truncated with ellipsis.
+
+        Creates many nested directories with long names to force truncation
+        and verifies the result is within MAX_FOLDER_STRUCTURE_LENGTH.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             # Create many nested directories with long names to force truncation
@@ -74,7 +82,11 @@ class TestGenerateFolderStructureSection:
                 assert result.endswith("...")
 
     def test_handles_empty_directory(self):
-        """Test handling of empty directory."""
+        """Test handling of empty directory.
+
+        Verifies that an empty directory still produces output containing
+        the folder name.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             result = _generate_folder_structure_section(Path(tmpdir))
 
@@ -87,7 +99,11 @@ class TestGenerateCopilotOutputSection:
 
     @pytest.mark.asyncio
     async def test_returns_buffer_content(self):
-        """Test that buffer content is returned."""
+        """Test that buffer content is returned.
+
+        Appends lines to the buffer and verifies they appear in the
+        generated section output.
+        """
         output_buffer = AsyncOutputBuffer()
         await output_buffer.append("Line 1\n")
         await output_buffer.append("Line 2\n")
@@ -99,7 +115,11 @@ class TestGenerateCopilotOutputSection:
 
     @pytest.mark.asyncio
     async def test_returns_waiting_message_when_empty(self):
-        """Test that waiting message is returned for empty buffer."""
+        """Test that waiting message is returned for empty buffer.
+
+        Verifies that when the buffer is empty, a "waiting for output"
+        message is displayed to the user.
+        """
         output_buffer = AsyncOutputBuffer()
 
         result = await _generate_copilot_output_section(output_buffer)
@@ -108,7 +128,11 @@ class TestGenerateCopilotOutputSection:
 
     @pytest.mark.asyncio
     async def test_truncates_long_output(self):
-        """Test that long output is truncated."""
+        """Test that long output is truncated.
+
+        Appends very long content to the buffer and verifies the result
+        is truncated to MAX_COPILOT_OUTPUT_LENGTH with leading ellipsis.
+        """
         output_buffer = AsyncOutputBuffer()
         await output_buffer.append("x" * 5000)
 
@@ -123,14 +147,22 @@ class TestGenerateSummarySection:
 
     @pytest.fixture
     def mock_interaction(self):
-        """Create a mock Discord interaction."""
+        """Create a mock Discord interaction.
+
+        Returns:
+            AsyncMock: A mock Discord interaction with user display_name set.
+        """
         interaction = AsyncMock()
         interaction.user = MagicMock()
         interaction.user.display_name = "testuser"
         return interaction
 
     def test_generates_in_progress_status(self, mock_interaction):
-        """Test that IN PROGRESS status is shown when not complete."""
+        """Test that IN PROGRESS status is shown when not complete.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             result = _generate_summary_section(
                 interaction=mock_interaction,
@@ -143,7 +175,11 @@ class TestGenerateSummarySection:
             assert "IN PROGRESS" in result
 
     def test_generates_success_status(self, mock_interaction):
-        """Test that SUCCESS status is shown on successful completion."""
+        """Test that SUCCESS status is shown on successful completion.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         mock_process = MagicMock()
         mock_process.returncode = 0
 
@@ -160,7 +196,11 @@ class TestGenerateSummarySection:
             assert "COMPLETED SUCCESSFULLY" in result
 
     def test_generates_timeout_status(self, mock_interaction):
-        """Test that TIMEOUT status is shown on timeout."""
+        """Test that TIMEOUT status is shown on timeout.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             result = _generate_summary_section(
                 interaction=mock_interaction,
@@ -174,7 +214,11 @@ class TestGenerateSummarySection:
             assert "TIMED OUT" in result
 
     def test_includes_github_status(self, mock_interaction):
-        """Test that GitHub status is included."""
+        """Test that GitHub status is included.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             result = _generate_summary_section(
                 interaction=mock_interaction,
@@ -188,7 +232,11 @@ class TestGenerateSummarySection:
             assert "GitHub" in result
 
     def test_truncates_long_prompt(self, mock_interaction):
-        """Test that long prompts are truncated."""
+        """Test that long prompts are truncated.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             long_prompt = "x" * 500
             result = _generate_summary_section(
@@ -206,7 +254,11 @@ class TestBuildUnifiedMessage:
     """Tests for _build_unified_message function."""
 
     def test_builds_message_with_all_sections(self):
-        """Test that unified message contains all three sections."""
+        """Test that unified message contains all three sections.
+
+        Verifies that folder, output, and summary sections are all present
+        in the built unified message.
+        """
         folder_section = "📁 test_folder/\nfile.txt"
         output_section = "Building project..."
         summary_section = "Status: IN PROGRESS"
@@ -218,7 +270,11 @@ class TestBuildUnifiedMessage:
         assert summary_section in result
 
     def test_uses_code_blocks(self):
-        """Test that code blocks are used for folder and output sections."""
+        """Test that code blocks are used for folder and output sections.
+
+        Verifies that the unified message contains at least 2 pairs of
+        code block markers for proper Discord formatting.
+        """
         result = _build_unified_message("folder", "output", "summary")
 
         assert result.count("```") >= 4  # At least 2 pairs of code blocks
@@ -229,7 +285,11 @@ class TestUpdateUnifiedMessage:
 
     @pytest.fixture
     def mock_interaction(self):
-        """Create a mock Discord interaction."""
+        """Create a mock Discord interaction.
+
+        Returns:
+            AsyncMock: A mock Discord interaction with user display_name set.
+        """
         interaction = AsyncMock()
         interaction.user = MagicMock()
         interaction.user.display_name = "testuser"
@@ -237,7 +297,11 @@ class TestUpdateUnifiedMessage:
 
     @pytest.mark.asyncio
     async def test_updates_message_periodically(self, mock_interaction):
-        """Test that message is updated periodically."""
+        """Test that message is updated periodically.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             (tmppath / "test.txt").touch()
@@ -271,7 +335,11 @@ class TestUpdateUnifiedMessage:
 
     @pytest.mark.asyncio
     async def test_stops_on_error_event(self, mock_interaction):
-        """Test that update stops when error event is set."""
+        """Test that update stops when error event is set.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             mock_message = AsyncMock()
             output_buffer = AsyncOutputBuffer()
@@ -295,7 +363,11 @@ class TestUpdateUnifiedMessage:
 
     @pytest.mark.asyncio
     async def test_handles_http_exception(self, mock_interaction):
-        """Test that HTTP exceptions are handled gracefully."""
+        """Test that HTTP exceptions are handled gracefully.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         import discord
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -336,7 +408,11 @@ class TestReadStream:
 
     @pytest.mark.asyncio
     async def test_reads_lines_to_buffer(self):
-        """Test that lines are read into buffer."""
+        """Test that lines are read into buffer.
+
+        Creates a mock stream with multiple lines and verifies all lines
+        are appended to the output buffer.
+        """
         # Create a mock stream
         mock_stream = AsyncMock()
         mock_stream.readline = AsyncMock(
@@ -357,7 +433,11 @@ class TestReadStream:
 
     @pytest.mark.asyncio
     async def test_handles_unicode(self):
-        """Test that unicode is handled correctly."""
+        """Test that unicode is handled correctly.
+
+        Verifies that UTF-8 encoded unicode characters are properly decoded
+        and preserved in the output buffer.
+        """
         mock_stream = AsyncMock()
         mock_stream.readline = AsyncMock(
             side_effect=["Hello 世界\n".encode("utf-8"), b""]
@@ -372,7 +452,11 @@ class TestReadStream:
 
     @pytest.mark.asyncio
     async def test_handles_invalid_utf8(self):
-        """Test that invalid UTF-8 is handled with replacement."""
+        """Test that invalid UTF-8 is handled with replacement.
+
+        Verifies that invalid UTF-8 byte sequences are handled gracefully
+        using replacement characters instead of raising errors.
+        """
         mock_stream = AsyncMock()
         mock_stream.readline = AsyncMock(side_effect=[b"\xff\xfe Invalid UTF-8\n", b""])
 
@@ -386,7 +470,10 @@ class TestReadStream:
 
     @pytest.mark.asyncio
     async def test_empty_stream(self):
-        """Test handling of empty stream."""
+        """Test handling of empty stream.
+
+        Verifies that an empty stream results in an empty output buffer.
+        """
         mock_stream = AsyncMock()
         mock_stream.readline = AsyncMock(side_effect=[b""])
 
@@ -401,7 +488,11 @@ class TestSetupCreateprojectCommand:
     """Tests for setup_createproject_command function."""
 
     def test_registers_command(self):
-        """Test that command is registered on bot."""
+        """Test that command is registered on bot.
+
+        Verifies that the tree.command decorator is called and returns
+        a callable command function.
+        """
         mock_bot = MagicMock()
         mock_bot.tree = MagicMock()
         mock_bot.tree.command = MagicMock(return_value=lambda f: f)
@@ -414,7 +505,10 @@ class TestSetupCreateprojectCommand:
         assert callable(result)
 
     def test_command_has_correct_name(self):
-        """Test that command is registered with correct name."""
+        """Test that command is registered with correct name.
+
+        Verifies that the command is registered with name "createproject".
+        """
         mock_bot = MagicMock()
         mock_bot.tree = MagicMock()
         mock_bot.tree.command = MagicMock(return_value=lambda f: f)
@@ -425,7 +519,10 @@ class TestSetupCreateprojectCommand:
         assert call_kwargs.get("name") == "createproject"
 
     def test_command_has_description(self):
-        """Test that command has a description."""
+        """Test that command has a description.
+
+        Verifies that a non-empty description is provided for the command.
+        """
         mock_bot = MagicMock()
         mock_bot.tree = MagicMock()
         mock_bot.tree.command = MagicMock(return_value=lambda f: f)
@@ -442,7 +539,12 @@ class TestCreateprojectCommandHandler:
 
     @pytest.fixture
     def mock_interaction(self):
-        """Create a mock Discord interaction."""
+        """Create a mock Discord interaction.
+
+        Returns:
+            AsyncMock: A fully mocked Discord interaction with response,
+                followup, channel, and user attributes.
+        """
         interaction = AsyncMock()
         interaction.response = AsyncMock()
         interaction.followup = AsyncMock()
@@ -454,14 +556,22 @@ class TestCreateprojectCommandHandler:
 
     @pytest.fixture
     def temp_projects_dir(self):
-        """Create a temporary projects directory."""
+        """Create a temporary projects directory.
+
+        Yields:
+            Path: Path to the temporary directory, cleaned up after test.
+        """
         tmpdir = tempfile.mkdtemp()
         yield Path(tmpdir)
         shutil.rmtree(tmpdir, ignore_errors=True)
 
     @pytest.mark.asyncio
     async def test_command_defers_response(self, mock_interaction):
-        """Test that command defers the response."""
+        """Test that command defers the response.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         mock_bot = MagicMock()
         captured_handler = None
 
@@ -507,7 +617,11 @@ class TestRunCopilotProcess:
 
     @pytest.mark.asyncio
     async def testrun_copilot_process_success(self):
-        """Test successful copilot process execution."""
+        """Test successful copilot process execution.
+
+        Verifies that the process runs to completion, registers with the
+        process registry, and returns expected success flags.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             project_path = Path(tmpdir)
             session_log = SessionLogCollector("test")
@@ -568,7 +682,11 @@ class TestRunCopilotProcess:
 
     @pytest.mark.asyncio
     async def testrun_copilot_process_with_model(self):
-        """Test copilot process execution with model specified."""
+        """Test copilot process execution with model specified.
+
+        Verifies that the --model flag is included in the subprocess
+        command when a model is specified.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             project_path = Path(tmpdir)
             session_log = SessionLogCollector("test")
@@ -618,7 +736,11 @@ class TestRunCopilotProcess:
 
     @pytest.mark.asyncio
     async def testrun_copilot_process_timeout(self):
-        """Test copilot process timeout handling."""
+        """Test copilot process timeout handling.
+
+        Verifies that when the process exceeds the timeout, it is killed
+        and the timed_out flag is set with appropriate output buffer message.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             project_path = Path(tmpdir)
             session_log = SessionLogCollector("test")
@@ -688,7 +810,11 @@ class TestRunCopilotProcess:
 
     @pytest.mark.asyncio
     async def testrun_copilot_process_exception(self):
-        """Test copilot process exception handling."""
+        """Test copilot process exception handling.
+
+        Verifies that when subprocess creation fails with an OSError,
+        the error_occurred flag and error_event are properly set.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             project_path = Path(tmpdir)
             session_log = SessionLogCollector("test")
@@ -726,7 +852,12 @@ class TestCommandValidation:
 
     @pytest.fixture
     def mock_interaction(self):
-        """Create a mock Discord interaction."""
+        """Create a mock Discord interaction.
+
+        Returns:
+            AsyncMock: A fully mocked Discord interaction with response,
+                followup, channel, and user attributes.
+        """
         interaction = AsyncMock()
         interaction.response = AsyncMock()
         interaction.followup = AsyncMock()
@@ -738,7 +869,11 @@ class TestCommandValidation:
 
     @pytest.mark.asyncio
     async def test_validates_empty_prompt(self, mock_interaction):
-        """Test that empty prompt is rejected."""
+        """Test that empty prompt is rejected.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         mock_bot = MagicMock()
         captured_handler = None
 
@@ -761,7 +896,11 @@ class TestCommandValidation:
 
     @pytest.mark.asyncio
     async def test_validates_long_prompt(self, mock_interaction):
-        """Test that overly long prompt is rejected."""
+        """Test that overly long prompt is rejected.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         mock_bot = MagicMock()
         captured_handler = None
 
@@ -785,7 +924,11 @@ class TestCommandValidation:
 
     @pytest.mark.asyncio
     async def test_validates_invalid_model(self, mock_interaction):
-        """Test that invalid model name is rejected."""
+        """Test that invalid model name is rejected.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         mock_bot = MagicMock()
         captured_handler = None
 
@@ -812,7 +955,11 @@ class TestHelperFunctions:
 
     @pytest.mark.asyncio
     async def testcreate_project_directory(self):
-        """Test that create_project_directory creates a directory."""
+        """Test that create_project_directory creates a directory.
+
+        Verifies that the function creates a project directory and returns
+        both the path and folder name containing the username.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("src.commands.createproject_helpers.PROJECTS_DIR", Path(tmpdir)):
                 session_log = SessionLogCollector("test_session")
@@ -826,7 +973,11 @@ class TestHelperFunctions:
 
     @pytest.mark.asyncio
     async def testsend_initial_message(self):
-        """Test that send_initial_message sends a unified message."""
+        """Test that send_initial_message sends a unified message.
+
+        Verifies that a followup message is sent and the returned message
+        object matches the expected mock.
+        """
         mock_interaction = AsyncMock()
         mock_unified_msg = AsyncMock()
         mock_interaction.user = MagicMock()
@@ -846,7 +997,11 @@ class TestHelperFunctions:
 
     @pytest.mark.asyncio
     async def testsend_initial_message_with_model(self):
-        """Test that send_initial_message includes model info."""
+        """Test that send_initial_message includes model info.
+
+        Verifies that when a model is specified, it appears in the
+        message content.
+        """
         mock_interaction = AsyncMock()
         mock_unified_msg = AsyncMock()
         mock_interaction.user = MagicMock()
@@ -871,7 +1026,11 @@ class TestUpdateFinalMessage:
 
     @pytest.fixture
     def mock_interaction(self):
-        """Create a mock Discord interaction."""
+        """Create a mock Discord interaction.
+
+        Returns:
+            AsyncMock: A mock Discord interaction with user display_name set.
+        """
         interaction = AsyncMock()
         interaction.user = MagicMock()
         interaction.user.display_name = "testuser"
@@ -879,7 +1038,11 @@ class TestUpdateFinalMessage:
 
     @pytest.mark.asyncio
     async def testupdate_final_message_success(self, mock_interaction):
-        """Test that update_final_message updates the unified message."""
+        """Test that update_final_message updates the unified message.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         mock_unified_msg = AsyncMock()
         output_buffer = AsyncOutputBuffer()
         await output_buffer.append("Test output")
@@ -908,7 +1071,11 @@ class TestUpdateFinalMessage:
 
     @pytest.mark.asyncio
     async def testupdate_final_message_with_model(self, mock_interaction):
-        """Test that update_final_message includes model info."""
+        """Test that update_final_message includes model info.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         mock_unified_msg = AsyncMock()
         output_buffer = AsyncOutputBuffer()
         await output_buffer.append("Test output")
@@ -937,7 +1104,11 @@ class TestUpdateFinalMessage:
 
     @pytest.mark.asyncio
     async def testupdate_final_message_handles_exception(self, mock_interaction):
-        """Test that update_final_message handles exceptions gracefully."""
+        """Test that update_final_message handles exceptions gracefully.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         mock_unified_msg = AsyncMock()
         mock_unified_msg.edit.side_effect = RuntimeError("Test error")
         output_buffer = AsyncOutputBuffer()
@@ -962,7 +1133,11 @@ class TestUpdateFinalMessage:
 
     @pytest.mark.asyncio
     async def testupdate_final_message_truncates_long_content(self, mock_interaction):
-        """Test that update_final_message truncates long output."""
+        """Test that update_final_message truncates long output.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         mock_unified_msg = AsyncMock()
         output_buffer = AsyncOutputBuffer()
         await output_buffer.append("x" * 10000)  # Very long output
@@ -996,7 +1171,11 @@ class TestHandleGithubIntegration:
 
     @pytest.mark.asyncio
     async def test_github_disabled(self):
-        """Test GitHub integration when disabled."""
+        """Test GitHub integration when disabled.
+
+        Verifies that when GITHUB_ENABLED is False, the function returns
+        empty status and success is False.
+        """
         from src.commands.createproject import handle_github_integration
 
         mock_process = MagicMock()
@@ -1025,7 +1204,11 @@ class TestHandleGithubIntegration:
 
     @pytest.mark.asyncio
     async def test_github_skipped_on_timeout(self):
-        """Test GitHub skipped when process timed out."""
+        """Test GitHub skipped when process timed out.
+
+        Verifies that GitHub push is skipped with appropriate message
+        when the copilot process times out.
+        """
         from src.commands.createproject import handle_github_integration
 
         mock_process = MagicMock()
@@ -1054,7 +1237,11 @@ class TestHandleGithubIntegration:
 
     @pytest.mark.asyncio
     async def test_github_skipped_on_error(self):
-        """Test GitHub skipped when error occurred."""
+        """Test GitHub skipped when error occurred.
+
+        Verifies that GitHub push is skipped with appropriate message
+        when an error occurs during copilot process execution.
+        """
         from src.commands.createproject import handle_github_integration
 
         mock_process = MagicMock()
@@ -1083,7 +1270,11 @@ class TestHandleGithubIntegration:
 
     @pytest.mark.asyncio
     async def test_github_skipped_on_nonzero_exit(self):
-        """Test GitHub skipped when process exit code is non-zero."""
+        """Test GitHub skipped when process exit code is non-zero.
+
+        Verifies that GitHub push is skipped with appropriate message
+        when the copilot process exits with a non-zero return code.
+        """
         from src.commands.createproject import handle_github_integration
 
         mock_process = MagicMock()
@@ -1112,7 +1303,11 @@ class TestHandleGithubIntegration:
 
     @pytest.mark.asyncio
     async def test_github_not_configured(self):
-        """Test GitHub when enabled but not configured."""
+        """Test GitHub when enabled but not configured.
+
+        Verifies that when GitHub is enabled but credentials are not
+        configured, an appropriate "Not configured" status is returned.
+        """
         from src.commands.createproject import handle_github_integration
 
         mock_process = MagicMock()
@@ -1146,7 +1341,11 @@ class TestHandleGithubIntegration:
 
     @pytest.mark.asyncio
     async def test_github_success(self):
-        """Test GitHub integration success."""
+        """Test GitHub integration success.
+
+        Verifies that when GitHub push succeeds, the status contains
+        a "View Repository" link and success is True.
+        """
         from src.commands.createproject import handle_github_integration
 
         mock_process = MagicMock()
@@ -1185,7 +1384,11 @@ class TestHandleGithubIntegration:
 
     @pytest.mark.asyncio
     async def test_github_failure(self):
-        """Test GitHub integration failure."""
+        """Test GitHub integration failure.
+
+        Verifies that when GitHub push fails, the status contains a
+        warning emoji and success is False.
+        """
         from src.commands.createproject import handle_github_integration
 
         mock_process = MagicMock()
@@ -1227,7 +1430,10 @@ class TestCleanupProjectDirectory:
     """Tests for cleanup_project_directory function."""
 
     def test_cleanup_success(self):
-        """Test successful cleanup of project directory."""
+        """Test successful cleanup of project directory.
+
+        Verifies that cleanup removes the directory and returns True.
+        """
         from src.commands.createproject import cleanup_project_directory
 
         session_log = SessionLogCollector("test")
@@ -1243,7 +1449,10 @@ class TestCleanupProjectDirectory:
             assert not project_path.exists()
 
     def test_cleanup_nonexistent_directory(self):
-        """Test cleanup of non-existent directory."""
+        """Test cleanup of non-existent directory.
+
+        Verifies that cleanup of a non-existent path returns False.
+        """
         from src.commands.createproject import cleanup_project_directory
 
         session_log = SessionLogCollector("test")
@@ -1254,7 +1463,11 @@ class TestCleanupProjectDirectory:
         assert result is False
 
     def test_cleanup_handles_exception(self):
-        """Test cleanup handles exceptions."""
+        """Test cleanup handles exceptions.
+
+        Verifies that PermissionError during cleanup returns False
+        without raising an exception.
+        """
         from src.commands.createproject import cleanup_project_directory
 
         session_log = SessionLogCollector("test")
@@ -1281,7 +1494,10 @@ class TestSendLogFile:
 
     @pytest.mark.asyncio
     async def test_send_log_file_success(self):
-        """Test sending log file on successful completion."""
+        """Test sending log file on successful completion.
+
+        Verifies that a file attachment is sent to the channel.
+        """
         mock_interaction = AsyncMock()
         mock_interaction.channel.send = AsyncMock()
 
@@ -1313,7 +1529,10 @@ class TestSendLogFile:
 
     @pytest.mark.asyncio
     async def test_send_log_file_timeout(self):
-        """Test sending log file on timeout."""
+        """Test sending log file on timeout.
+
+        Verifies that log file is sent even when process times out.
+        """
         mock_interaction = AsyncMock()
         mock_interaction.channel.send = AsyncMock()
 
@@ -1341,7 +1560,10 @@ class TestSendLogFile:
 
     @pytest.mark.asyncio
     async def test_send_log_file_error(self):
-        """Test sending log file on error."""
+        """Test sending log file on error.
+
+        Verifies that log file is sent even when an error occurs.
+        """
         mock_interaction = AsyncMock()
         mock_interaction.channel.send = AsyncMock()
 
@@ -1368,7 +1590,11 @@ class TestSendLogFile:
 
     @pytest.mark.asyncio
     async def test_send_log_file_includes_copilot_output(self):
-        """Test that copilot output is included in the log file attachment."""
+        """Test that copilot output is included in the log file attachment.
+
+        Verifies that the log file content contains the Copilot Output
+        section with the expected output text.
+        """
         mock_interaction = AsyncMock()
         mock_interaction.channel.send = AsyncMock()
 
@@ -1415,14 +1641,22 @@ class TestGenerateSummarySectionEdgeCases:
 
     @pytest.fixture
     def mock_interaction(self):
-        """Create a mock Discord interaction."""
+        """Create a mock Discord interaction.
+
+        Returns:
+            AsyncMock: A mock Discord interaction with user mention set.
+        """
         interaction = AsyncMock()
         interaction.user = MagicMock()
         interaction.user.mention = "@testuser"
         return interaction
 
     def test_error_status_with_message(self, mock_interaction):
-        """Test error status with error message (line 121)."""
+        """Test error status with error message.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             result = _generate_summary_section(
                 interaction=mock_interaction,
@@ -1438,7 +1672,11 @@ class TestGenerateSummarySectionEdgeCases:
             assert "Something went wrong" in result or "❌" in result
 
     def test_error_status_without_message(self, mock_interaction):
-        """Test error status with empty error message (line 121 - else branch)."""
+        """Test error status with empty error message.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             result = _generate_summary_section(
                 interaction=mock_interaction,
@@ -1453,7 +1691,11 @@ class TestGenerateSummarySectionEdgeCases:
             assert "ERROR" in result or "Unknown error" in result
 
     def test_exit_code_with_no_process(self, mock_interaction):
-        """Test exit code display when process is None (line 125)."""
+        """Test exit code display when process is None.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             result = _generate_summary_section(
                 interaction=mock_interaction,
@@ -1467,7 +1709,11 @@ class TestGenerateSummarySectionEdgeCases:
             assert "unknown" in result or "EXIT CODE" in result
 
     def test_exit_code_with_nonzero_returncode(self, mock_interaction):
-        """Test exit code display with non-zero return code (line 125-126)."""
+        """Test exit code display with non-zero return code.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         mock_process = MagicMock()
         mock_process.returncode = 42
 
@@ -1488,7 +1734,11 @@ class TestBuildUnifiedMessageTruncation:
     """Tests for _build_unified_message truncation logic."""
 
     def test_truncates_long_folder_section(self):
-        """Test that long folder section is truncated (line 162)."""
+        """Test that long folder section is truncated.
+
+        Verifies that folder sections exceeding the limit are truncated
+        with ellipsis and the result is within MAX_MESSAGE_LENGTH.
+        """
         long_folder = "x" * 1000  # Exceeds MAX_FOLDER_STRUCTURE_LENGTH
         output_section = "output"
         summary_section = "summary"
@@ -1499,7 +1749,11 @@ class TestBuildUnifiedMessageTruncation:
         assert len(result) <= MAX_MESSAGE_LENGTH
 
     def test_truncates_long_output_section(self):
-        """Test that long output section is truncated (line 164)."""
+        """Test that long output section is truncated.
+
+        Verifies that output sections exceeding the limit are truncated
+        with ellipsis and the result is within MAX_MESSAGE_LENGTH.
+        """
         folder_section = "folder"
         long_output = "x" * 2000  # Exceeds MAX_COPILOT_OUTPUT_LENGTH
         summary_section = "summary"
@@ -1510,7 +1764,11 @@ class TestBuildUnifiedMessageTruncation:
         assert len(result) <= MAX_MESSAGE_LENGTH
 
     def test_truncates_long_summary_section(self):
-        """Test that long summary section is truncated (line 166)."""
+        """Test that long summary section is truncated.
+
+        Verifies that summary sections exceeding MAX_SUMMARY_LENGTH
+        are truncated with ellipsis.
+        """
         from src.config import MAX_SUMMARY_LENGTH
 
         folder_section = "folder"
@@ -1522,7 +1780,11 @@ class TestBuildUnifiedMessageTruncation:
         assert "..." in result
 
     def test_final_safety_truncation(self):
-        """Test final safety truncation when combined message is too long (lines 174-177)."""
+        """Test final safety truncation when combined message is too long.
+
+        Creates sections that together exceed MAX_MESSAGE_LENGTH and
+        verifies the result is truncated to fit within the limit.
+        """
         # Create sections that together exceed MAX_MESSAGE_LENGTH
         folder_section = "f" * 300
         output_section = "o" * 1200
@@ -1533,7 +1795,11 @@ class TestBuildUnifiedMessageTruncation:
         assert len(result) <= MAX_MESSAGE_LENGTH
 
     def test_final_safety_truncation_preserves_summary(self):
-        """Test that summary is preserved during final safety truncation (line 176-179)."""
+        """Test that summary is preserved during final safety truncation.
+
+        Verifies that when final truncation is applied, the summary
+        section is preserved while output is truncated first.
+        """
         # To hit lines 176-179, we need:
         # 1. Combined message to exceed MAX_MESSAGE_LENGTH after individual truncation
         # 2. Output section to be > overflow amount
@@ -1562,7 +1828,11 @@ class TestBuildUnifiedMessageTruncation:
                     assert len(result) <= MAX_MESSAGE_LENGTH
 
     def test_truncation_when_output_shorter_than_overflow(self):
-        """Test truncation when output section is shorter than overflow (line 177 else)."""
+        """Test truncation when output section is shorter than overflow.
+
+        Tests the edge case where output is too small to truncate further
+        but the combined message still exceeds the limit.
+        """
         # To hit the else branch of line 177, we need:
         # 1. Combined message > MAX_MESSAGE_LENGTH (hits line 174)
         # 2. But output_section <= overflow (skips line 178)
@@ -1604,7 +1874,11 @@ class TestCreateProjectDirectoryWithNaming:
 
     @pytest.mark.asyncio
     async def test_uses_creative_name_when_available(self):
-        """Test that creative name is used when naming generator returns one (lines 263-265, 268-269)."""
+        """Test that creative name is used when naming generator returns one.
+
+        Verifies that when the naming generator is configured and returns
+        a name, it is used as the folder name.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("src.commands.createproject_helpers.PROJECTS_DIR", Path(tmpdir)):
                 with patch(
@@ -1623,7 +1897,11 @@ class TestCreateProjectDirectoryWithNaming:
 
     @pytest.mark.asyncio
     async def test_fallback_when_naming_fails(self):
-        """Test fallback to standard naming when creative name fails (lines 274-275)."""
+        """Test fallback to standard naming when creative name fails.
+
+        Verifies that when the naming generator fails to generate a name,
+        the standard username-based naming is used as fallback.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("src.commands.createproject_helpers.PROJECTS_DIR", Path(tmpdir)):
                 with patch(
@@ -1642,7 +1920,11 @@ class TestCreateProjectDirectoryWithNaming:
 
     @pytest.mark.asyncio
     async def test_standard_naming_when_not_configured(self):
-        """Test standard naming when naming generator not configured."""
+        """Test standard naming when naming generator not configured.
+
+        Verifies that when the naming generator is not configured,
+        the standard username-based naming is used.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("src.commands.createproject_helpers.PROJECTS_DIR", Path(tmpdir)):
                 with patch(
@@ -1663,7 +1945,11 @@ class TestSendInitialMessageTruncation:
 
     @pytest.mark.asyncio
     async def test_truncates_long_prompt(self):
-        """Test that long prompt is truncated in initial message (line 302-303)."""
+        """Test that long prompt is truncated in initial message.
+
+        Verifies that prompts exceeding PROMPT_SUMMARY_TRUNCATE_LENGTH
+        are truncated with ellipsis in the initial message.
+        """
         mock_interaction = AsyncMock()
         mock_unified_msg = AsyncMock()
         mock_interaction.user = MagicMock()
@@ -1687,7 +1973,11 @@ class TestSendLogFileEdgeCases:
 
     @pytest.mark.asyncio
     async def test_nonzero_exit_code_with_process(self):
-        """Test log file with non-zero exit code (lines 552-553)."""
+        """Test log file with non-zero exit code.
+
+        Verifies that log file is sent when process exits with
+        non-zero return code.
+        """
         mock_interaction = AsyncMock()
         mock_interaction.channel.send = AsyncMock()
 
@@ -1715,7 +2005,10 @@ class TestSendLogFileEdgeCases:
 
     @pytest.mark.asyncio
     async def test_nonzero_exit_code_without_process(self):
-        """Test log file with no process (line 552 - else branch)."""
+        """Test log file with no process.
+
+        Verifies that log file is sent correctly when process is None.
+        """
         mock_interaction = AsyncMock()
         mock_interaction.channel.send = AsyncMock()
 
@@ -1741,7 +2034,11 @@ class TestSendLogFileEdgeCases:
 
     @pytest.mark.asyncio
     async def test_handles_send_exception(self):
-        """Test handling of exception when sending log file (lines 576-577)."""
+        """Test handling of exception when sending log file.
+
+        Verifies that exceptions during log file send are handled
+        gracefully without raising.
+        """
         mock_interaction = AsyncMock()
         mock_interaction.channel.send = AsyncMock(
             side_effect=RuntimeError("Send failed")
@@ -1774,7 +2071,11 @@ class TestUpdateUnifiedMessageEdgeCases:
 
     @pytest.fixture
     def mock_interaction(self):
-        """Create a mock Discord interaction."""
+        """Create a mock Discord interaction.
+
+        Returns:
+            AsyncMock: A mock Discord interaction with user mention set.
+        """
         interaction = AsyncMock()
         interaction.user = MagicMock()
         interaction.user.mention = "@testuser"
@@ -1782,7 +2083,11 @@ class TestUpdateUnifiedMessageEdgeCases:
 
     @pytest.mark.asyncio
     async def test_skips_update_when_content_unchanged(self, mock_interaction):
-        """Test that message is not edited when content hasn't changed (line 215)."""
+        """Test that message is not edited when content hasn't changed.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             (tmppath / "test.txt").touch()
@@ -1830,7 +2135,11 @@ class TestUpdateUnifiedMessageEdgeCases:
 
     @pytest.mark.asyncio
     async def test_handles_generic_exception(self, mock_interaction):
-        """Test that generic exceptions are handled (lines 221-222)."""
+        """Test that generic exceptions are handled.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             (tmppath / "test.txt").touch()
@@ -1869,7 +2178,11 @@ class TestGithubIntegrationEdgeCases:
 
     @pytest.mark.asyncio
     async def test_github_with_none_process(self):
-        """Test GitHub integration when process is None (line 470 condition fails)."""
+        """Test GitHub integration when process is None.
+
+        Verifies behavior when process is None and no timeout or error
+        occurred, resulting in an empty status.
+        """
         from src.commands.createproject import handle_github_integration
 
         session_log = SessionLogCollector("test")
@@ -1900,7 +2213,11 @@ class TestHandleRemoveReadonly:
     """Tests for _handle_remove_readonly function."""
 
     def test_removes_readonly_on_permission_error(self):
-        """Test that readonly attribute is removed on PermissionError."""
+        """Test that readonly attribute is removed on PermissionError.
+
+        Verifies that when a PermissionError occurs, the file's readonly
+        attribute is removed and the removal function is called.
+        """
         import os
         import stat
 
@@ -1929,7 +2246,11 @@ class TestHandleRemoveReadonly:
             assert remove_called[0] == str(test_file)
 
     def test_raises_non_permission_errors(self):
-        """Test that non-PermissionError exceptions are re-raised."""
+        """Test that non-PermissionError exceptions are re-raised.
+
+        Verifies that exceptions other than PermissionError are
+        properly propagated.
+        """
 
         def mock_func(path):
             pass
@@ -1948,7 +2269,11 @@ class TestCleanupWithReadonlyFiles:
     """Tests for cleanup_project_directory with read-only files."""
 
     def test_cleanup_with_readonly_git_objects(self):
-        """Test cleanup handles read-only .git files like on Windows."""
+        """Test cleanup handles read-only .git files like on Windows.
+
+        Verifies that cleanup can remove directories containing
+        read-only .git object files.
+        """
         import os
         import stat
 
@@ -1974,7 +2299,11 @@ class TestCleanupWithReadonlyFiles:
             assert not project_path.exists()
 
     def test_cleanup_with_nested_readonly_directories(self):
-        """Test cleanup handles nested read-only directories."""
+        """Test cleanup handles nested read-only directories.
+
+        Verifies that cleanup can remove directories with multiple
+        nested read-only files.
+        """
         import os
         import stat
 
@@ -2004,7 +2333,12 @@ class TestWebhookTokenExpiration:
 
     @pytest.fixture
     def mock_interaction(self):
-        """Create a mock Discord interaction."""
+        """Create a mock Discord interaction.
+
+        Returns:
+            AsyncMock: A fully mocked Discord interaction with user
+                display_name, mention, and channel attributes.
+        """
         interaction = AsyncMock()
         interaction.user = MagicMock()
         interaction.user.display_name = "testuser"
@@ -2016,7 +2350,11 @@ class TestWebhookTokenExpiration:
     async def testupdate_final_message_refetches_on_expired_token(
         self, mock_interaction
     ):
-        """Test that update_final_message re-fetches message when token expires."""
+        """Test that update_final_message re-fetches message when token expires.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         import discord
 
         mock_unified_msg = AsyncMock()
@@ -2066,7 +2404,11 @@ class TestWebhookTokenExpiration:
     async def testupdate_final_message_reraises_other_http_errors(
         self, mock_interaction
     ):
-        """Test that update_final_message handles non-50027 HTTP errors gracefully."""
+        """Test that update_final_message handles non-50027 HTTP errors gracefully.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         import discord
 
         mock_unified_msg = AsyncMock()
@@ -2110,7 +2452,11 @@ class TestWebhookTokenExpiration:
     async def test_update_unified_message_refetches_on_expired_token(
         self, mock_interaction
     ):
-        """Test that update_unified_message re-fetches message when token expires during updates."""
+        """Test that update_unified_message re-fetches message when token expires.
+
+        Args:
+            mock_interaction: Mock Discord interaction fixture.
+        """
         import discord
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2165,11 +2511,15 @@ class TestWebhookTokenExpiration:
 
 
 class TestRunCopilotProcessProgressLog:
-    """Tests for run_copilot_process progress logging (lines 403-407)."""
+    """Tests for run_copilot_process progress logging."""
 
     @pytest.mark.asyncio
     async def test_progress_log_runs_while_process_executes(self):
-        """Test that progress logging runs during process execution."""
+        """Test that progress logging runs during process execution.
+
+        Verifies that progress logging occurs while the copilot process
+        is executing by using a slow wait function.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             project_path = Path(tmpdir)
             session_log = SessionLogCollector("test")
@@ -2236,10 +2586,14 @@ class TestRunCopilotProcessProgressLog:
 
 
 class TestBuildUnifiedMessageFinalTruncation:
-    """Additional tests for _build_unified_message final truncation (lines 176-179)."""
+    """Additional tests for _build_unified_message final truncation."""
 
     def test_output_truncation_when_total_exceeds_limit(self):
-        """Test that output is truncated when total message exceeds limit."""
+        """Test that output is truncated when total message exceeds limit.
+
+        Verifies that when combined sections exceed MAX_MESSAGE_LENGTH,
+        the output is truncated while preserving the summary.
+        """
         # Create sections where the total definitely exceeds MAX_MESSAGE_LENGTH
         # Even after individual truncations
         folder_section = "FOLDER " * 50  # ~350 chars
@@ -2254,7 +2608,10 @@ class TestBuildUnifiedMessageFinalTruncation:
         assert "SUMMARY" in result
 
     def test_ellipsis_added_when_output_truncated(self):
-        """Test that ellipsis is added when output is truncated in final pass."""
+        """Test that ellipsis is added when output is truncated in final pass.
+
+        Verifies that truncated output sections include ellipsis markers.
+        """
         # Create long enough sections to trigger final truncation
         folder_section = "F" * 500
         output_section = "O" * 1500
@@ -2266,7 +2623,11 @@ class TestBuildUnifiedMessageFinalTruncation:
         assert "..." in result
 
     def test_final_truncation_when_combined_exactly_exceeds_limit(self):
-        """Test final truncation is triggered when combined message exceeds limit."""
+        """Test final truncation is triggered when combined message exceeds limit.
+
+        Verifies that when sections at their maximum lengths are combined,
+        the result is still within MAX_MESSAGE_LENGTH.
+        """
         from src.config import (
             MAX_FOLDER_STRUCTURE_LENGTH,
             MAX_COPILOT_OUTPUT_LENGTH,
@@ -2285,7 +2646,11 @@ class TestBuildUnifiedMessageFinalTruncation:
         assert len(result) <= MAX_MESSAGE_LENGTH
 
     def test_final_truncation_with_code_blocks_overhead(self):
-        """Test final truncation accounts for code block overhead (```\\n ... ```\\n)."""
+        """Test final truncation accounts for code block overhead.
+
+        Verifies that the truncation logic properly accounts for the
+        overhead from code block markers in the final message.
+        """
         # Each section has overhead: "```\n" + content + "\n```\n" = 8 chars per code block
         # Plus the summary at the end without code blocks
         # Total overhead: 8 + 8 = 16 chars for the two code blocks

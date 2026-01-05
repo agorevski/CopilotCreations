@@ -14,13 +14,11 @@ class TestTruncateOutput:
     """Tests for truncate_output function which truncates long text from the beginning."""
     
     def test_truncation_behavior(self):
-        """
-        Tests truncation with various input lengths:
-        - Short text (unchanged)
-        - Exact length text (unchanged)  
-        - Long text (truncated with ... prefix)
-        - Empty string handling
-        - Default max_length from config
+        """Tests truncation with various input lengths.
+
+        Tests that truncate_output correctly handles text of different lengths,
+        including short text, exact length text, long text requiring truncation,
+        and empty strings. Also verifies default max_length from config.
         """
         # Short text unchanged
         short_text = "Hello, world!"
@@ -51,11 +49,11 @@ class TestFormatErrorMessage:
     """Tests for format_error_message function which formats errors for Discord display."""
     
     def test_error_formatting(self):
-        """
-        Tests error message formatting options:
-        - With traceback (code block formatting)
-        - Without traceback (inline formatting)
-        - Default include_traceback=True
+        """Tests error message formatting options.
+
+        Tests that format_error_message correctly formats error messages with
+        and without traceback. Verifies code block formatting is used when
+        traceback is included, and inline formatting when it is not.
         """
         # With traceback - uses code block
         result_with_tb = format_error_message("Test Error", "Error details", include_traceback=True)
@@ -80,15 +78,12 @@ class TestSplitMessage:
     """Tests for split_message function which splits long messages at natural break points."""
     
     def test_split_behavior(self):
-        """
-        Tests message splitting at various break points:
-        - Short messages (unchanged, single-item list)
-        - Splits at paragraph breaks (\\n\\n)
-        - Splits at newlines (\\n)
-        - Splits at sentences (.)
-        - Splits at spaces
-        - Hard breaks for text without spaces
-        - All chunks stay within limit
+        """Tests message splitting at various break points.
+
+        Tests that split_message correctly splits long messages at natural break
+        points including paragraph breaks, newlines, sentences, and spaces.
+        Also verifies hard breaks for text without spaces and that all chunks
+        stay within the specified limit.
         """
         # Short message unchanged
         short = "Hello, world!"

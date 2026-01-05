@@ -13,7 +13,17 @@ class TestSetupSessionCommands:
     """Tests for setup_session_commands function."""
     
     def test_registers_three_commands(self):
-        """Test that three commands are registered."""
+        """Test that three commands are registered.
+
+        Verifies that setup_session_commands registers startproject,
+        buildproject, and cancelprompt commands on the bot's tree.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If not all three commands are registered.
+        """
         from src.commands.session_commands import setup_session_commands
         
         mock_bot = MagicMock()
@@ -37,7 +47,17 @@ class TestSetupSessionCommands:
         assert 'cancelprompt' in command_names
     
     def test_returns_callable_functions(self):
-        """Test that returned functions are callable."""
+        """Test that returned functions are callable.
+
+        Verifies that the three command handlers returned by
+        setup_session_commands are all callable functions.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If any returned function is not callable.
+        """
         from src.commands.session_commands import setup_session_commands
         
         mock_bot = MagicMock()
@@ -55,7 +75,12 @@ class TestStartprojectCommand:
     
     @pytest.fixture
     def mock_interaction(self):
-        """Create a mock Discord interaction."""
+        """Create a mock Discord interaction.
+
+        Returns:
+            AsyncMock: A mock Discord interaction with response, followup,
+                channel, and user attributes configured.
+        """
         interaction = AsyncMock()
         interaction.response = AsyncMock()
         interaction.followup = AsyncMock()
@@ -68,7 +93,20 @@ class TestStartprojectCommand:
     
     @pytest.mark.asyncio
     async def test_defers_response(self, mock_interaction):
-        """Test that command defers the response."""
+        """Test that command defers the response.
+
+        Verifies that the startproject command calls defer() on the
+        interaction response to prevent timeout.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If defer was not called once.
+        """
         mock_sm = MagicMock()
         mock_sm.get_session = AsyncMock(return_value=None)
         mock_session = MagicMock()
@@ -105,7 +143,21 @@ class TestStartprojectCommand:
     
     @pytest.mark.asyncio
     async def test_detects_existing_session(self, mock_interaction):
-        """Test that existing session is detected."""
+        """Test that existing session is detected.
+
+        Verifies that when a user already has an active session, the
+        startproject command informs them instead of creating a new one.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If the "already have an active session" message
+                is not sent.
+        """
         existing_session = MagicMock()
         existing_session.get_message_count.return_value = 5
         existing_session.get_word_count.return_value = 50
@@ -145,7 +197,12 @@ class TestBuildprojectCommand:
     
     @pytest.fixture
     def mock_interaction(self):
-        """Create a mock Discord interaction."""
+        """Create a mock Discord interaction.
+
+        Returns:
+            AsyncMock: A mock Discord interaction with response, followup,
+                channel, and user attributes configured.
+        """
         interaction = AsyncMock()
         interaction.response = AsyncMock()
         interaction.followup = AsyncMock()
@@ -158,7 +215,20 @@ class TestBuildprojectCommand:
     
     @pytest.mark.asyncio
     async def test_no_active_session(self, mock_interaction):
-        """Test when no active session exists."""
+        """Test when no active session exists.
+
+        Verifies that buildproject informs the user when they try to
+        build without an active prompt session.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If the "No active prompt session" message is not sent.
+        """
         mock_sm = MagicMock()
         mock_sm.get_session = AsyncMock(return_value=None)
         
@@ -190,7 +260,20 @@ class TestBuildprojectCommand:
     
     @pytest.mark.asyncio
     async def test_empty_session(self, mock_interaction):
-        """Test when session has no messages."""
+        """Test when session has no messages.
+
+        Verifies that buildproject informs the user when their session
+        contains no messages.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If the "No messages" error is not sent.
+        """
         mock_session = MagicMock()
         mock_session.get_message_count.return_value = 0
         
@@ -225,7 +308,20 @@ class TestBuildprojectCommand:
     
     @pytest.mark.asyncio
     async def test_invalid_model_name(self, mock_interaction):
-        """Test with invalid model name."""
+        """Test with invalid model name.
+
+        Verifies that buildproject rejects invalid model names and
+        informs the user with an appropriate error message.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If the "Invalid" error message is not sent.
+        """
         mock_session = MagicMock()
         mock_session.get_message_count.return_value = 5
         
@@ -264,7 +360,12 @@ class TestCancelpromptCommand:
     
     @pytest.fixture
     def mock_interaction(self):
-        """Create a mock Discord interaction."""
+        """Create a mock Discord interaction.
+
+        Returns:
+            AsyncMock: A mock Discord interaction with response, user,
+                and channel attributes configured.
+        """
         interaction = AsyncMock()
         interaction.response = AsyncMock()
         interaction.user = MagicMock()
@@ -276,7 +377,21 @@ class TestCancelpromptCommand:
     
     @pytest.mark.asyncio
     async def test_cancel_existing_session(self, mock_interaction):
-        """Test cancelling an existing session."""
+        """Test cancelling an existing session.
+
+        Verifies that cancelprompt successfully ends an active session
+        and reports the session statistics.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If the cancellation message is not sent
+                or doesn't contain expected content.
+        """
         cancelled_session = MagicMock()
         cancelled_session.get_message_count.return_value = 5
         cancelled_session.get_word_count.return_value = 50
@@ -312,7 +427,20 @@ class TestCancelpromptCommand:
     
     @pytest.mark.asyncio
     async def test_cancel_no_session(self, mock_interaction):
-        """Test cancelling when no session exists."""
+        """Test cancelling when no session exists.
+
+        Verifies that cancelprompt informs the user when they try to
+        cancel without having an active session.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If the "No active session" message is not sent.
+        """
         mock_sm = MagicMock()
         mock_sm.end_session = AsyncMock(return_value=None)
         
@@ -346,7 +474,17 @@ class TestSetupMessageListener:
     """Tests for setup_message_listener function."""
     
     def test_returns_callable(self):
-        """Test that a callable event handler is returned."""
+        """Test that a callable event handler is returned.
+
+        Verifies that setup_message_listener returns a callable
+        on_message event handler.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If the returned handler is not callable.
+        """
         from src.commands.session_commands import setup_message_listener
         
         mock_bot = MagicMock()
@@ -358,7 +496,17 @@ class TestSetupMessageListener:
     
     @pytest.mark.asyncio
     async def test_ignores_bot_messages(self):
-        """Test that bot messages are ignored."""
+        """Test that bot messages are ignored.
+
+        Verifies that the message listener does not process messages
+        from bot users.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If get_session is called for a bot message.
+        """
         mock_sm = MagicMock()
         mock_sm.get_session = AsyncMock()
         
@@ -388,7 +536,17 @@ class TestSetupMessageListener:
     
     @pytest.mark.asyncio
     async def test_ignores_dm_messages(self):
-        """Test that DM messages are ignored."""
+        """Test that DM messages are ignored.
+
+        Verifies that the message listener does not process direct
+        messages (messages without a guild).
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If get_session is called for a DM message.
+        """
         mock_sm = MagicMock()
         mock_sm.get_session = AsyncMock()
         
@@ -419,7 +577,17 @@ class TestSetupMessageListener:
     
     @pytest.mark.asyncio
     async def test_ignores_messages_without_session(self):
-        """Test that messages are ignored when no session exists."""
+        """Test that messages are ignored when no session exists.
+
+        Verifies that the message listener checks for a session but
+        does not process messages when no session is active.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If get_session is not called exactly once.
+        """
         mock_sm = MagicMock()
         mock_sm.get_session = AsyncMock(return_value=None)
         
@@ -453,7 +621,17 @@ class TestSetupMessageListener:
     
     @pytest.mark.asyncio
     async def test_ignores_command_messages(self):
-        """Test that command messages are ignored."""
+        """Test that command messages are ignored.
+
+        Verifies that messages starting with "/" (slash commands)
+        are not added to the session.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If add_message is called for a command message.
+        """
         mock_session = MagicMock()
         mock_session.add_message = MagicMock()
         
@@ -490,7 +668,17 @@ class TestSetupMessageListener:
     
     @pytest.mark.asyncio
     async def test_ignores_empty_messages(self):
-        """Test that empty messages are ignored."""
+        """Test that empty messages are ignored.
+
+        Verifies that messages containing only whitespace are not
+        added to the session.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If add_message is called for an empty message.
+        """
         mock_session = MagicMock()
         mock_session.add_message = MagicMock()
         
@@ -527,7 +715,18 @@ class TestSetupMessageListener:
     
     @pytest.mark.asyncio
     async def test_adds_message_to_session(self):
-        """Test that valid messages are added to session."""
+        """Test that valid messages are added to session.
+
+        Verifies that valid user messages are properly added to the
+        session with both add_message and add_conversation_turn calls.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If add_message or add_conversation_turn
+                are not called with correct parameters.
+        """
         mock_session = MagicMock()
         mock_session.add_message = MagicMock()
         mock_session.add_conversation_turn = MagicMock()
@@ -576,7 +775,12 @@ class TestExecuteProjectCreation:
     
     @pytest.fixture
     def mock_interaction(self):
-        """Create a mock Discord interaction."""
+        """Create a mock Discord interaction.
+
+        Returns:
+            AsyncMock: A mock Discord interaction with response, followup,
+                channel, and user attributes configured.
+        """
         interaction = AsyncMock()
         interaction.response = AsyncMock()
         interaction.followup = AsyncMock()
@@ -589,7 +793,20 @@ class TestExecuteProjectCreation:
     
     @pytest.mark.asyncio
     async def test_creates_project_with_prompt(self, mock_interaction):
-        """Test that project creation is executed."""
+        """Test that project creation is executed.
+
+        Verifies that _execute_project_creation properly orchestrates
+        directory creation, message sending, and Copilot process execution.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If any of the project creation steps are not called.
+        """
         from src.commands.session_commands import _execute_project_creation
         
         mock_bot = MagicMock()
@@ -616,7 +833,20 @@ class TestExecuteProjectCreation:
     
     @pytest.mark.asyncio
     async def test_handles_directory_creation_failure(self, mock_interaction):
-        """Test handling of directory creation failure."""
+        """Test handling of directory creation failure.
+
+        Verifies that _execute_project_creation handles OSError during
+        directory creation and sends an error message to the channel.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If error message is not sent to channel.
+        """
         from src.commands.session_commands import _execute_project_creation
         
         mock_bot = MagicMock()
@@ -632,7 +862,20 @@ class TestExecuteProjectCreation:
     
     @pytest.mark.asyncio
     async def test_handles_message_send_failure(self, mock_interaction):
-        """Test handling of message send failure."""
+        """Test handling of message send failure.
+
+        Verifies that _execute_project_creation handles exceptions during
+        initial message sending and reports the error.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If error handling doesn't send at least one message.
+        """
         from src.commands.session_commands import _execute_project_creation
         
         mock_bot = MagicMock()
@@ -651,7 +894,20 @@ class TestExecuteProjectCreation:
     
     @pytest.mark.asyncio
     async def test_cleanup_on_successful_push(self, mock_interaction):
-        """Test cleanup after successful GitHub push."""
+        """Test cleanup after successful GitHub push.
+
+        Verifies that project directory is cleaned up after a successful
+        GitHub push when CLEANUP_AFTER_PUSH is enabled.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If cleanup_project_directory is not called.
+        """
         from src.commands.session_commands import _execute_project_creation
         
         mock_bot = MagicMock()
@@ -681,7 +937,12 @@ class TestStartprojectWithDescription:
     
     @pytest.fixture
     def mock_interaction(self):
-        """Create a mock Discord interaction."""
+        """Create a mock Discord interaction.
+
+        Returns:
+            AsyncMock: A mock Discord interaction with response, followup,
+                channel, and user attributes configured.
+        """
         interaction = AsyncMock()
         interaction.response = AsyncMock()
         interaction.followup = AsyncMock()
@@ -694,7 +955,20 @@ class TestStartprojectWithDescription:
     
     @pytest.mark.asyncio
     async def test_starts_session_with_description_and_ai(self, mock_interaction):
-        """Test starting a session with description and AI refinement."""
+        """Test starting a session with description and AI refinement.
+
+        Verifies that startproject with a description and configured AI
+        refinement service adds the description and triggers AI conversation.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If add_message or add_conversation_turn are not called.
+        """
         mock_session = MagicMock()
         mock_session.add_message = MagicMock()
         mock_session.add_conversation_turn = MagicMock()
@@ -737,7 +1011,20 @@ class TestStartprojectWithDescription:
     
     @pytest.mark.asyncio
     async def test_starts_session_without_ai(self, mock_interaction):
-        """Test starting a session with description but no AI."""
+        """Test starting a session with description but no AI.
+
+        Verifies that startproject with a description but unconfigured
+        AI service informs the user that AI refinement is not available.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If "AI refinement not configured" message is not sent.
+        """
         mock_session = MagicMock()
         mock_session.add_message = MagicMock()
         mock_session.add_conversation_turn = MagicMock()
@@ -778,7 +1065,20 @@ class TestStartprojectWithDescription:
     
     @pytest.mark.asyncio
     async def test_long_ai_response_splits(self, mock_interaction):
-        """Test that long AI responses are split into chunks."""
+        """Test that long AI responses are split into chunks.
+
+        Verifies that AI responses exceeding Discord's message limit
+        are properly split into multiple messages or file attachments.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If at least one message is not sent to channel.
+        """
         mock_session = MagicMock()
         mock_session.add_message = MagicMock()
         mock_session.add_conversation_turn = MagicMock()
@@ -830,7 +1130,12 @@ class TestBuildprojectFullFlow:
     
     @pytest.fixture
     def mock_interaction(self):
-        """Create a mock Discord interaction."""
+        """Create a mock Discord interaction.
+
+        Returns:
+            AsyncMock: A mock Discord interaction with response, followup,
+                channel, and user attributes configured.
+        """
         interaction = AsyncMock()
         interaction.response = AsyncMock()
         interaction.followup = AsyncMock()
@@ -843,7 +1148,20 @@ class TestBuildprojectFullFlow:
     
     @pytest.mark.asyncio
     async def test_buildproject_with_ai_finalization(self, mock_interaction):
-        """Test buildproject with AI prompt finalization."""
+        """Test buildproject with AI prompt finalization.
+
+        Verifies that buildproject uses AI to finalize the prompt when
+        conversation history exists and no pre-refined prompt is set.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If finalize_prompt is not called once.
+        """
         mock_session = MagicMock()
         mock_session.get_message_count.return_value = 5
         mock_session.conversation_history = [{"role": "user", "content": "test"}]
@@ -884,7 +1202,20 @@ class TestBuildprojectFullFlow:
     
     @pytest.mark.asyncio
     async def test_buildproject_without_ai(self, mock_interaction):
-        """Test buildproject without AI finalization."""
+        """Test buildproject without AI finalization.
+
+        Verifies that buildproject uses raw user input when AI refinement
+        service is not configured.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If get_full_user_input is not called once.
+        """
         mock_session = MagicMock()
         mock_session.get_message_count.return_value = 5
         mock_session.conversation_history = []
@@ -925,7 +1256,20 @@ class TestBuildprojectFullFlow:
     
     @pytest.mark.asyncio
     async def test_buildproject_prompt_too_long(self, mock_interaction):
-        """Test buildproject with prompt that's too long."""
+        """Test buildproject with prompt that's too long.
+
+        Verifies that buildproject rejects prompts exceeding the maximum
+        allowed length and informs the user.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If "Too Long" error message is not sent.
+        """
         mock_session = MagicMock()
         mock_session.get_message_count.return_value = 5
         mock_session.conversation_history = []
@@ -964,7 +1308,20 @@ class TestBuildprojectFullFlow:
     
     @pytest.mark.asyncio
     async def test_buildproject_message_cleanup(self, mock_interaction):
-        """Test that buildproject cleans up session messages."""
+        """Test that buildproject cleans up session messages.
+
+        Verifies that buildproject attempts to delete all messages
+        stored in the session's message_ids list.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If fetch_message is not called for each message ID.
+        """
         import discord
         
         mock_session = MagicMock()
@@ -1013,7 +1370,12 @@ class TestStreamingEdgeCases:
     
     @pytest.fixture
     def mock_interaction(self):
-        """Create a mock Discord interaction."""
+        """Create a mock Discord interaction.
+
+        Returns:
+            AsyncMock: A mock Discord interaction with response, followup,
+                channel, and user attributes configured.
+        """
         interaction = AsyncMock()
         interaction.response = AsyncMock()
         interaction.followup = AsyncMock()
@@ -1026,7 +1388,20 @@ class TestStreamingEdgeCases:
     
     @pytest.mark.asyncio
     async def test_streaming_edit_failure_logs_warning(self, mock_interaction):
-        """Test that HTTP exceptions during message edit are logged."""
+        """Test that HTTP exceptions during message edit are logged.
+
+        Verifies that Discord HTTPException during streaming message edits
+        is handled gracefully and the edit is attempted.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If edit was not attempted at least once.
+        """
         import discord
         
         mock_session = MagicMock()
@@ -1078,7 +1453,20 @@ class TestStreamingEdgeCases:
     
     @pytest.mark.asyncio
     async def test_long_response_with_footer_splits(self, mock_interaction):
-        """Test that long responses split footer properly."""
+        """Test that long responses split footer properly.
+
+        Verifies that responses near the Discord limit that include a
+        footer are properly handled to avoid exceeding the message limit.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If at least one message is not sent.
+        """
         mock_session = MagicMock()
         mock_session.add_message = MagicMock()
         mock_session.add_conversation_turn = MagicMock()
@@ -1129,7 +1517,17 @@ class TestMessageListenerRefinedPrompt:
     
     @pytest.mark.asyncio
     async def test_message_with_refined_prompt(self):
-        """Test handling of message that triggers refined prompt."""
+        """Test handling of message that triggers refined prompt.
+
+        Verifies that when the AI response includes a refined prompt,
+        it is stored in the session's refined_prompt attribute.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If refined_prompt is not set correctly.
+        """
         mock_session = MagicMock()
         mock_session.add_message = MagicMock()
         mock_session.add_conversation_turn = MagicMock()
@@ -1194,7 +1592,17 @@ class TestMessageListenerRefinedPrompt:
     
     @pytest.mark.asyncio
     async def test_long_message_response_creates_file(self):
-        """Test that long responses create file attachments."""
+        """Test that long responses create file attachments.
+
+        Verifies that AI responses exceeding Discord's message limit
+        are sent as file attachments.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If channel.send is not called at least once.
+        """
         mock_session = MagicMock()
         mock_session.add_message = MagicMock()
         mock_session.add_conversation_turn = MagicMock()
@@ -1263,7 +1671,12 @@ class TestBuildprojectMessageCleanupErrors:
     
     @pytest.fixture
     def mock_interaction(self):
-        """Create a mock Discord interaction."""
+        """Create a mock Discord interaction.
+
+        Returns:
+            AsyncMock: A mock Discord interaction with response, followup,
+                channel, and user attributes configured.
+        """
         interaction = AsyncMock()
         interaction.response = AsyncMock()
         interaction.followup = AsyncMock()
@@ -1276,7 +1689,20 @@ class TestBuildprojectMessageCleanupErrors:
     
     @pytest.mark.asyncio
     async def test_message_cleanup_handles_not_found(self, mock_interaction):
-        """Test that NotFound errors during cleanup are handled."""
+        """Test that NotFound errors during cleanup are handled.
+
+        Verifies that discord.NotFound exceptions during message cleanup
+        are handled gracefully without raising.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If fetch_message is not called for all messages.
+        """
         import discord
         
         mock_session = MagicMock()
@@ -1325,7 +1751,20 @@ class TestBuildprojectMessageCleanupErrors:
     
     @pytest.mark.asyncio
     async def test_message_cleanup_handles_forbidden(self, mock_interaction):
-        """Test that Forbidden errors during cleanup are handled."""
+        """Test that Forbidden errors during cleanup are handled.
+
+        Verifies that discord.Forbidden exceptions during message deletion
+        are handled gracefully without raising.
+
+        Args:
+            mock_interaction: Pytest fixture providing mock Discord interaction.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If delete is not attempted once.
+        """
         import discord
         
         mock_session = MagicMock()
@@ -1377,7 +1816,17 @@ class TestMessageListenerAIResponse:
     
     @pytest.mark.asyncio
     async def test_gets_ai_response_with_refined_prompt(self):
-        """Test message listener with AI response containing refined prompt."""
+        """Test message listener with AI response containing refined prompt.
+
+        Verifies that when a user message triggers an AI response with
+        a refined prompt, it is stored and the prompt file is sent.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If reply is not called or refined_prompt is not set.
+        """
         mock_session = MagicMock()
         mock_session.add_message = MagicMock()
         mock_session.add_conversation_turn = MagicMock()
@@ -1438,7 +1887,17 @@ class TestMessageListenerAIResponse:
     
     @pytest.mark.asyncio
     async def test_gets_ai_response_without_refined_prompt(self):
-        """Test message listener with AI response but no refined prompt."""
+        """Test message listener with AI response but no refined prompt.
+
+        Verifies that when a user message triggers an AI response without
+        a refined prompt (follow-up question), it is sent normally.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If channel.send is not called once.
+        """
         mock_session = MagicMock()
         mock_session.add_message = MagicMock()
         mock_session.add_conversation_turn = MagicMock()
@@ -1494,7 +1953,17 @@ class TestMessageListenerAIResponse:
     
     @pytest.mark.asyncio
     async def test_progress_reminder_every_5_messages(self):
-        """Test that progress reminder is shown every 5 messages."""
+        """Test that progress reminder is shown every 5 messages.
+
+        Verifies that a session progress reminder is displayed when
+        the message count reaches a multiple of 5.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If "Session progress" message is not sent.
+        """
         mock_session = MagicMock()
         mock_session.add_message = MagicMock()
         mock_session.add_conversation_turn = MagicMock()

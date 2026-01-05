@@ -16,14 +16,15 @@ class TestRepositoryNamingGeneratorInit:
     """Tests for RepositoryNamingGenerator initialization and configuration."""
 
     def test_init_and_configuration(self):
-        """
-        Tests initialization and is_configured method:
-        - Loads configuration values from environment
-        - Works with missing/None config values
-        - is_configured returns True only when all values present
-        - is_configured False with empty strings
-        - Accepts custom credentials (dependency injection)
-        - Defaults to config values when not provided
+        """Test RepositoryNamingGenerator initialization and is_configured method.
+
+        Verifies:
+            - Loads configuration values from environment
+            - Works with missing/None config values
+            - is_configured returns True only when all values present
+            - is_configured False with empty strings
+            - Accepts custom credentials (dependency injection)
+            - Defaults to config values when not provided
         """
         # Loads config
         with (
@@ -124,11 +125,12 @@ class TestClientProperty:
     """Tests for the client property lazy loading behavior."""
 
     def test_client_property(self):
-        """
-        Tests client property:
-        - Returns None when not configured
-        - Lazy loads client on first access
-        - Caches client (only creates once)
+        """Test client property lazy loading behavior.
+
+        Verifies:
+            - Returns None when not configured
+            - Lazy loads client on first access
+            - Caches client (only creates once)
         """
         # Returns None when not configured
         with (
@@ -165,17 +167,18 @@ class TestSanitizeName:
     """Tests for the _sanitize_name method which cleans repository names."""
 
     def test_sanitize_name(self):
-        """
-        Tests name sanitization:
-        - Removes quotes (single and double)
-        - Converts to lowercase
-        - Replaces spaces with hyphens
-        - Replaces underscores with hyphens
-        - Removes special characters
-        - Collapses consecutive hyphens
-        - Removes leading/trailing hyphens
-        - Limits length to 50 characters
-        - Handles empty input
+        """Test _sanitize_name method for cleaning repository names.
+
+        Verifies:
+            - Removes quotes (single and double)
+            - Converts to lowercase
+            - Replaces spaces with hyphens
+            - Replaces underscores with hyphens
+            - Removes special characters
+            - Collapses consecutive hyphens
+            - Removes leading/trailing hyphens
+            - Limits length to 50 characters
+            - Handles empty input
         """
         with (
             patch(
@@ -223,16 +226,17 @@ class TestGenerateName:
     """Tests for the generate_name method."""
 
     def test_generate_name(self):
-        """
-        Tests generate_name method:
-        - Returns None when not configured
-        - Successfully generates and sanitizes names
-        - Handles quotes in API response
-        - Returns None for empty/None response
-        - Returns None when sanitization results in empty
-        - Handles API exceptions gracefully
-        - Uses default prompt when template missing
-        - Passes correct GPT 5.2 parameters
+        """Test generate_name method for generating repository names.
+
+        Verifies:
+            - Returns None when not configured
+            - Successfully generates and sanitizes names
+            - Handles quotes in API response
+            - Returns None for empty/None response
+            - Returns None when sanitization results in empty
+            - Handles API exceptions gracefully
+            - Uses default prompt when template missing
+            - Passes correct GPT 5.2 parameters
         """
         # Not configured
         with (
@@ -416,14 +420,15 @@ class TestGenerateDescription:
     """Tests for generate_description method."""
 
     def test_generate_description(self):
-        """
-        Tests generate_description method:
-        - Returns None when not configured
-        - Successfully generates description
-        - Returns None for empty response
-        - Returns None when sanitization results in empty (whitespace-only)
-        - Handles API exceptions gracefully
-        - Uses default prompt when template missing
+        """Test generate_description method for generating repository descriptions.
+
+        Verifies:
+            - Returns None when not configured
+            - Successfully generates description
+            - Returns None for empty response
+            - Returns None when sanitization results in empty (whitespace-only)
+            - Handles API exceptions gracefully
+            - Uses default prompt when template missing
         """
         # Not configured
         with (
@@ -569,11 +574,12 @@ class TestSanitizeDescription:
     """Tests for _sanitize_description method."""
 
     def test_sanitize_description(self):
-        """
-        Tests description sanitization:
-        - Removes quotes
-        - Removes control characters
-        - Truncates long descriptions (>350 chars) with ...
+        """Test _sanitize_description method for cleaning descriptions.
+
+        Verifies:
+            - Removes quotes
+            - Removes control characters
+            - Truncates long descriptions (>350 chars) with ...
         """
         with patch("src.utils.azure_openai_client.AZURE_OPENAI_ENDPOINT", None):
             generator = RepositoryNamingGenerator()
@@ -599,11 +605,12 @@ class TestNamingConstants:
     """Tests for naming module constants and singleton."""
 
     def test_constants_and_singleton(self):
-        """
-        Tests naming constants:
-        - MAX_REPO_NAME_LENGTH is 50
-        - MAX_DESCRIPTION_LENGTH is 350
-        - naming_generator singleton exists and is correct type
+        """Test naming module constants and singleton instance.
+
+        Verifies:
+            - MAX_REPO_NAME_LENGTH is 50
+            - MAX_DESCRIPTION_LENGTH is 350
+            - naming_generator singleton exists and is correct type
         """
         from src.utils.naming import MAX_REPO_NAME_LENGTH, naming_generator
 

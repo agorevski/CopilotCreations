@@ -14,14 +14,18 @@ class TestMessageTemplates:
     """Tests for MessageTemplates class and its formatting methods."""
     
     def test_format_methods(self):
-        """
-        Tests all message formatting methods:
-        - Session started with description (includes AI response note)
-        - Session started empty (includes timeout and buildproject hint)
-        - Session exists warning (shows message/word counts)
-        - Session cancelled (shows deleted message info)
-        - Progress update (shows current counts)
-        - Summary template (includes all project info)
+        """Test all message formatting methods in MessageTemplates class.
+
+        Tests the following formatting methods:
+            - format_session_started_with_desc: Session started with description
+            - format_session_started_empty: Session started without description
+            - format_session_exists_warning: Warning when session already exists
+            - format_session_cancelled: Session cancellation message
+            - format_progress_update: Progress update message
+            - format_summary: Summary template with all project info
+
+        Raises:
+            AssertionError: If any formatted message is missing expected content.
         """
         # Session started with description
         started_desc = MessageTemplates.format_session_started_with_desc("Test project")
@@ -75,14 +79,18 @@ class TestProjectSummary:
     """Tests for ProjectSummary dataclass and format_project_success method."""
     
     def test_dataclass_and_formatting(self):
-        """
-        Tests ProjectSummary creation and formatting:
-        - Basic creation with required fields
-        - Default github_status is empty
-        - Creation with GitHub info
-        - format_project_success with GitHub URL
-        - format_project_success without GitHub URL
-        - format_project_success with github_status fallback
+        """Test ProjectSummary dataclass creation and formatting methods.
+
+        Tests the following scenarios:
+            - Basic creation with required fields only
+            - Default github_status is empty string
+            - Creation with GitHub info (url, project_name, description)
+            - format_project_success with GitHub URL included
+            - format_project_success without GitHub URL
+            - format_project_success with github_status fallback
+
+        Raises:
+            AssertionError: If dataclass fields or formatted output are incorrect.
         """
         # Basic creation
         summary = ProjectSummary(
@@ -166,10 +174,14 @@ class TestMessageTemplateConstants:
     """Tests for message template constants availability."""
     
     def test_all_templates_defined(self):
-        """
-        Verifies all required message templates are defined:
-        - Session messages (started, exists, cancelled, no session)
-        - Project messages (success, in progress, timed out, completed)
+        """Verify all required message template constants are defined.
+
+        Tests that MessageTemplates class has all expected class attributes:
+            - Session messages: started, exists, cancelled, no session variants
+            - Project messages: success, in progress, timed out, completed variants
+
+        Raises:
+            AssertionError: If any required template constant is missing or empty.
         """
         # Session messages
         assert MessageTemplates.SESSION_STARTED_WITH_DESC

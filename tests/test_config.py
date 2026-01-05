@@ -33,20 +33,20 @@ class TestConfigValues:
     """Tests for configuration values and their expected types/values."""
     
     def test_directory_paths(self):
-        """
-        Tests directory path configurations:
-        - PROJECTS_DIR is a Path object
-        - BASE_DIR is a Path object
+        """Tests directory path configurations.
+
+        Verifies that PROJECTS_DIR and BASE_DIR are properly configured
+        as Path objects for file system operations.
         """
         assert isinstance(PROJECTS_DIR, Path)
         assert isinstance(BASE_DIR, Path)
     
     def test_timeout_and_intervals(self):
-        """
-        Tests timeout and interval configurations:
-        - TIMEOUT_SECONDS is positive and calculated from TIMEOUT_MINUTES
-        - UPDATE_INTERVAL is positive (3 seconds for message updates)
-        - PROGRESS_LOG_INTERVAL_SECONDS is positive (30 seconds)
+        """Tests timeout and interval configurations.
+
+        Verifies that TIMEOUT_SECONDS is correctly calculated from TIMEOUT_MINUTES,
+        UPDATE_INTERVAL is set to 3 seconds for message updates, and
+        PROGRESS_LOG_INTERVAL_SECONDS is set to 30 seconds.
         """
         from src.config import TIMEOUT_MINUTES
         
@@ -60,11 +60,10 @@ class TestConfigValues:
         assert PROGRESS_LOG_INTERVAL_SECONDS == 30
     
     def test_message_and_prompt_limits(self):
-        """
-        Tests message and prompt length limits:
-        - MAX_MESSAGE_LENGTH for Discord (1950, leaves buffer for 2000 limit)
-        - PROMPT_LOG_TRUNCATE_LENGTH (100)
-        - PROMPT_SUMMARY_TRUNCATE_LENGTH (200)
+        """Tests message and prompt length limits.
+
+        Verifies MAX_MESSAGE_LENGTH is 1950 (buffer for Discord's 2000 limit),
+        PROMPT_LOG_TRUNCATE_LENGTH is 100, and PROMPT_SUMMARY_TRUNCATE_LENGTH is 200.
         """
         assert MAX_MESSAGE_LENGTH > 0
         assert MAX_MESSAGE_LENGTH == 1950
@@ -76,10 +75,11 @@ class TestConfigValues:
         assert PROMPT_SUMMARY_TRUNCATE_LENGTH == 200
     
     def test_copilot_flags(self):
-        """
-        Tests Copilot CLI default flags:
-        - Is a non-empty list
-        - Contains required permission flags
+        """Tests Copilot CLI default flags.
+
+        Verifies COPILOT_DEFAULT_FLAGS is a non-empty list containing
+        required permission flags: --allow-all-paths, --allow-all-tools,
+        and --allow-all-urls.
         """
         assert isinstance(COPILOT_DEFAULT_FLAGS, list)
         assert len(COPILOT_DEFAULT_FLAGS) > 0
@@ -88,12 +88,11 @@ class TestConfigValues:
         assert "--allow-all-urls" in COPILOT_DEFAULT_FLAGS
     
     def test_other_constants(self):
-        """
-        Tests other configuration constants:
-        - UNIQUE_ID_LENGTH (8)
-        - MAX_FOLDER_NAME_LENGTH (50)
-        - GITHUB_REPO_PRIVATE is boolean
-        - MAX_PARALLEL_REQUESTS is positive integer
+        """Tests other configuration constants.
+
+        Verifies UNIQUE_ID_LENGTH is 8, MAX_FOLDER_NAME_LENGTH is 50,
+        GITHUB_REPO_PRIVATE is a boolean, and MAX_PARALLEL_REQUESTS is
+        a positive integer.
         """
         assert UNIQUE_ID_LENGTH > 0
         assert UNIQUE_ID_LENGTH == 8
@@ -112,11 +111,10 @@ class TestConfigInitialization:
     """Tests for configuration initialization and idempotency."""
     
     def test_init_config(self):
-        """
-        Tests init_config function:
-        - Can be called without error
-        - Is idempotent (multiple calls safe)
-        - is_initialized returns boolean
+        """Tests init_config function.
+
+        Verifies that init_config can be called without error, is idempotent
+        (multiple calls are safe), and that is_initialized returns a boolean.
         """
         init_config()  # Should not raise
         init_config()  # Idempotent
@@ -130,12 +128,11 @@ class TestPromptTemplates:
     """Tests for prompt template functionality and error handling."""
     
     def test_get_prompt_template(self):
-        """
-        Tests get_prompt_template function:
-        - CONFIG_YAML_PATH is a Path
-        - Returns string for known commands
-        - Returns empty string for unknown commands
-        - Template has content when config.yaml exists
+        """Tests get_prompt_template function.
+
+        Verifies that CONFIG_YAML_PATH is a Path, get_prompt_template returns
+        a string for known commands, returns an empty string for unknown commands,
+        and the template has content when config.yaml exists.
         """
         assert isinstance(CONFIG_YAML_PATH, Path)
         
@@ -152,10 +149,10 @@ class TestPromptTemplates:
             assert len(template) > 0
     
     def test_init_config_error_handling(self):
-        """
-        Tests init_config error handling:
-        - Logs warning on YAML parse error but completes
-        - Handles IOError gracefully
+        """Tests init_config error handling.
+
+        Verifies that init_config logs a warning on YAML parse errors but
+        still completes initialization, and handles IOError gracefully.
         """
         from unittest.mock import patch, mock_open
         import src.config
